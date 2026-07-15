@@ -28,7 +28,7 @@ export type Settings = {
 };
 export type Tournament = {
   id: string; name: string; settings: Settings; players: Player[]; matches: Match[];
-  previousMatches?: Match[];
+  previousMatches?: Match[]; isPublic?: boolean;
 };
 export type Standing = { id: string; name: string; points: number; played: number; wins: number; draws: number; losses: number; gf: number; ga: number; coinToss?: boolean };
 export type Quality = { min: number; max: number; consecutive: number; maxPartnerRepeats: number; averagePartnerRepeats: number; levelImbalance: number; violations: number; mixedPercent: number };

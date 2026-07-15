@@ -40,11 +40,35 @@ partite e pause. Alla prima connessione a un database vuoto, i tornei locali
 vengono importati in una transazione e gli identificativi legacy sono convertiti
 in UUID.
 
-Non inserire mai `SUPABASE_SERVICE_ROLE_KEY` nel client. Le policy RLS incluse
-sono volutamente aperte per il prototipo/demo: prima di pubblicare il progetto
-sostituiscile con policy basate su `auth.uid()` e limita le scritture agli
-organizzatori. L'URL e la publishable/anon key sono le sole variabili esposte
-da Vite.
+Non inserire mai `SUPABASE_SERVICE_ROLE_KEY` nel client. L'URL e la
+publishable/anon key sono le sole variabili esposte da Vite.
+
+## Accesso organizzatore (Supabase Auth)
+
+Con le migrazioni Auth applicate, le pagine di gestione richiedono un account
+Supabase; le pagine `/public/:slug`, `/public/:slug/schedule` e
+`/public/:slug/standings` restano leggibili senza login soltanto per tornei con
+`is_public = true`. Non esiste registrazione pubblica nell'app.
+
+1. In Supabase Dashboard apri **Authentication → Users → Add user** e crea il
+   primo organizzatore, confermando l'email.
+2. In **Authentication → URL Configuration** imposta la Site URL e aggiungi
+   gli URL di redirect per lo sviluppo e la produzione, ad esempio
+   `http://localhost:5173/reset-password`. Non inserire URL di produzione nel
+   codice: opzionalmente configura `VITE_APP_URL` in `.env.local`.
+3. Dopo il primo login su un progetto che contiene dati precedenti ad Auth,
+   esegui dalla SQL editor autenticata `select public.claim_unowned_tournaments();`.
+   La funzione assegna solo i tornei senza proprietario all'utente corrente.
+   Dopo il controllo puoi rendere `owner_id` obbligatorio con il comando
+   commentato nella migrazione Auth.
+
+Le policy RLS bloccano ogni scrittura al ruolo `anon` e limitano i dati
+amministrativi al proprietario del torneo. Le viste pubbliche escludono note,
+disponibilità, vincoli, stato dei giocatori, proprietario e campi di audit.
+Il browser usa esclusivamente la publishable/anon key; non esporre mai una
+service-role key. Il flusso **Password dimenticata** usa il redirect configurato
+per `/reset-password`, dove è possibile impostare una password di almeno otto
+caratteri.
 
 ## Funzioni incluse
 
