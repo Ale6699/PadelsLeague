@@ -6,6 +6,7 @@ export interface TournamentStore {
   load(): Tournament[];
   save(tournaments: Tournament[]): number;
   loadSnapshot(): TournamentSnapshot;
+  reloadTournament(lastKnownUpdate: number, current: Tournament[]): TournamentSnapshot | null;
 }
 
 /** Browser implementation. The app only depends on this interface, so it can later use SQLite or Supabase. */
@@ -27,6 +28,16 @@ export class LocalTournamentStore implements TournamentStore {
     const lastUpdated = Date.now();
     localStorage.setItem(this.key, JSON.stringify({ tournaments, lastUpdated } satisfies TournamentSnapshot));
     return lastUpdated;
+  }
+  /**
+   * Read-through operation used by the public screen. Returning null keeps React
+   * state untouched when another tab did not actually save newer tournament data.
+   * A Supabase Realtime adapter can implement the same contract later.
+   */
+  reloadTournament(lastKnownUpdate: number, current: Tournament[]) {
+    const snapshot = this.loadSnapshot();
+    if (snapshot.lastUpdated && snapshot.lastUpdated === lastKnownUpdate) return null;
+    return JSON.stringify(snapshot.tournaments) === JSON.stringify(current) ? null : snapshot;
   }
   get storageKey() { return this.key; }
 }

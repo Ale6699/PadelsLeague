@@ -26,9 +26,8 @@ function App() {
   const tournament = tournaments.find(item => item.id === activeId) ?? tournaments[0];
   useEffect(() => { tournamentsRef.current = tournaments; lastUpdatedRef.current = tournamentStore.save(tournaments); }, [tournaments]);
   const reloadTournaments = useCallback(() => {
-    const snapshot = tournamentStore.loadSnapshot();
-    if (snapshot.lastUpdated && snapshot.lastUpdated === lastUpdatedRef.current) return false;
-    if (JSON.stringify(snapshot.tournaments) === JSON.stringify(tournamentsRef.current)) return false;
+    const snapshot = tournamentStore.reloadTournament(lastUpdatedRef.current, tournamentsRef.current);
+    if (!snapshot) return false;
     tournamentsRef.current = snapshot.tournaments;
     lastUpdatedRef.current = snapshot.lastUpdated;
     setTournaments(snapshot.tournaments);
