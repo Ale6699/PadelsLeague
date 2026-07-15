@@ -1,5 +1,6 @@
 import { Match, Player, Tournament, fullName, toMin } from '../models';
 import { calculateMatchBalance } from './matchBalance';
+import { isMatchCompleted } from './matchResults';
 
 export type ShareScheduleOptions = { includeLevels?: boolean; includeBalanceRating?: boolean; includeResults?: boolean; includeNotes?: boolean; includePauses?: boolean; compact?: boolean; lastUpdated?: number };
 export const defaultShareScheduleOptions: Required<Omit<ShareScheduleOptions, 'lastUpdated'>> = { includeLevels: false, includeBalanceRating: false, includeResults: false, includeNotes: true, includePauses: true, compact: false };
@@ -22,7 +23,7 @@ function formatMatch(match: Match, tournament: Tournament, playerById: Map<strin
   const teams = `${a1} + ${a2} contro ${b1} + ${b2}`;
   const compact = `${match.start} — ${a1}/${a2} vs ${b1}/${b2}`;
   const details: string[] = [];
-  if (options.includeResults) details.push(match.result?.outcome ? `Risultato: ${match.result.aGames}–${match.result.bGames}` : 'Risultato: da giocare');
+  if (options.includeResults) details.push(isMatchCompleted(match) ? `Risultato: ${match.result?.aGames ?? '–'}–${match.result?.bGames ?? '–'}` : 'Risultato: da giocare');
   if (options.includeBalanceRating) details.push(`Equilibrio: ${calculateMatchBalance(match, tournament.players).score}/100`);
   return options.compact ? [compact, ...details].join(' · ') : [`${match.start}–${match.end}`, teams.replace(' contro ', '\ncontro\n'), ...details].join('\n');
 }

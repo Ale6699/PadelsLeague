@@ -8,7 +8,8 @@ export type Player = {
   id: string; firstName: string; lastName: string; level: Level; gender: Gender;
   notes: string; availability: Availability[]; avoidPartners: string[]; status: PlayerStatus;
 };
-export type MatchResult = { aGames: number; bGames: number; outcome: 'A' | 'B' | 'D' | '' };
+/** outcome remains optional only to read tournaments saved by older app versions. */
+export type MatchResult = { aGames: number | null; bGames: number | null; outcome?: 'A' | 'B' | 'D' | '' };
 export type Match = {
   id: string; start: string; end: string; players: [string, string, string, string];
   locked: boolean; violations: string[]; result?: MatchResult;

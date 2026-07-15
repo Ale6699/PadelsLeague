@@ -3,12 +3,13 @@ import { Circle, RefreshCw } from 'lucide-react';
 import { Standing, Tournament, fullName } from '../models';
 import { refreshOptions, useTournamentAutoRefresh } from '../hooks/useTournamentAutoRefresh';
 import { calculateMatchBalance } from '../services/matchBalance';
+import { isMatchCompleted } from '../services/matchResults';
 
 const formatTime = (date: Date) => date.toLocaleTimeString('it-IT');
 
 export const PublicDisplay = memo(function PublicDisplay({ tournament, standings, reloadTournament, storageKey }: { tournament: Tournament; standings: Standing[]; reloadTournament: () => boolean; storageKey: string }) {
   const names = useMemo(() => new Map(tournament.players.map(player => [player.id, fullName(player)])), [tournament.players]);
-  const pendingMatches = useMemo(() => tournament.matches.filter(match => !match.result?.outcome), [tournament.matches]);
+  const pendingMatches = useMemo(() => tournament.matches.filter(match => !isMatchCompleted(match)), [tournament.matches]);
   const next = pendingMatches[0] ?? tournament.matches[0];
   const nextRating = useMemo(() => next ? calculateMatchBalance(next, tournament.players) : undefined, [next, tournament.players]);
   const upcoming = pendingMatches.slice(1, 4);

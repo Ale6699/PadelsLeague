@@ -1,5 +1,6 @@
 import { Match, Player, Quality, Settings, Tournament, levelValue, pairKey, toMin, toTime, uid } from './models';
 import { calculateMatchBalance } from './services/matchBalance';
+import { isMatchCompleted } from './services/matchResults';
 
 const overlap = (a1: number, a2: number, b1: number, b2: number) => Math.max(a1, b1) < Math.min(a2, b2);
 export const isAvailable = (player: Player, start: number, end: number) =>
@@ -19,7 +20,7 @@ const teamMixed = (a: Player, b: Player) => a.gender !== 'Altro' && b.gender !==
 /** Heuristic solver with a cost function, deliberately isolated so it can be swapped for CP-SAT. */
 export function generateSchedule(tournament: Tournament, keepLocked = true): Match[] {
   const slots = buildSlots(tournament.settings);
-  const locked = keepLocked ? tournament.matches.filter(match => match.locked || match.result?.outcome) : [];
+  const locked = keepLocked ? tournament.matches.filter(match => match.locked || isMatchCompleted(match)) : [];
   const lockedByTime = new Map(locked.map(match => [match.start, match]));
   const players = tournament.players;
   const count = new Map(players.map(player => [player.id, 0]));

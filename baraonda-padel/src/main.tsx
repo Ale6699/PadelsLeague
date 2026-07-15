@@ -14,6 +14,7 @@ import { tournamentStore } from './storage';
 import './styles.css';
 import './balance.css';
 import './share.css';
+import './results.css';
 
 const nav = [
   ['dashboard', 'Panoramica', CalendarDays], ['players', 'Giocatori', Users], ['settings', 'Configurazione', SlidersHorizontal],
