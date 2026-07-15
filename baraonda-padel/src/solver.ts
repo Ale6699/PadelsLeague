@@ -1,4 +1,5 @@
 import { Match, Player, Quality, Settings, Tournament, levelValue, pairKey, toMin, toTime, uid } from './models';
+import { calculateMatchBalance } from './services/matchBalance';
 
 const overlap = (a1: number, a2: number, b1: number, b2: number) => Math.max(a1, b1) < Math.min(a2, b2);
 export const isAvailable = (player: Player, start: number, end: number) =>
@@ -21,7 +22,6 @@ export function generateSchedule(tournament: Tournament, keepLocked = true): Mat
   const locked = keepLocked ? tournament.matches.filter(match => match.locked || match.result?.outcome) : [];
   const lockedByTime = new Map(locked.map(match => [match.start, match]));
   const players = tournament.players;
-  const playerById = new Map(players.map(player => [player.id, player]));
   const count = new Map(players.map(player => [player.id, 0]));
   const partners = new Map<string, number>();
   const lastSlot = new Map<string, number>();
@@ -47,16 +47,17 @@ export function generateSchedule(tournament: Tournament, keepLocked = true): Mat
         const [one, two, three, four] = [group[i], group[j], group[k], group[l]];
         const badA = one.avoidPartners.includes(two.id) || two.avoidPartners.includes(one.id);
         const badB = three.avoidPartners.includes(four.id) || four.avoidPartners.includes(three.id);
-        const strengthGap = Math.abs(levelValue[one.level] + levelValue[two.level] - levelValue[three.level] - levelValue[four.level]);
         const womenA = [one, two].filter(player => player.gender === 'Donna').length;
         const womenB = [three, four].filter(player => player.gender === 'Donna').length;
         const violations: string[] = [];
         if (badA) violations.push(`${one.firstName} e ${two.firstName}: incompatibilità tra compagni`);
         if (badB) violations.push(`${three.firstName} e ${four.firstName}: incompatibilità tra compagni`);
-        if (strengthGap >= 3) violations.push('Squadre molto sbilanciate per livello');
+        const balance = calculateMatchBalance({ id: 'candidate', start: slot.start, end: slot.end, players: [one.id, two.id, three.id, four.id], locked: false, violations: [] }, players);
+        violations.push(...balance.warnings);
         if ((womenA === 2 && womenB === 0) || (womenB === 2 && womenA === 0)) violations.push('Due donne contro due uomini');
         const repeated = (partners.get(pairKey(one.id, two.id)) ?? 0) + (partners.get(pairKey(three.id, four.id)) ?? 0);
-        let score = base + groupSpread * 70 + repeated * 230 + strengthGap * 85 + (badA || badB ? 100000 : 0);
+        const balancePenalty = (100 - balance.score) * 7 + (balance.score < 60 ? 500 : 0) + (balance.score < 40 ? 1500 : 0);
+        let score = base + groupSpread * 70 + repeated * 230 + balancePenalty + (badA || badB ? 100000 : 0);
         if (tournament.settings.prioritizeMixed) score += (!teamMixed(one, two) ? 25 : 0) + (!teamMixed(three, four) ? 25 : 0);
         if ((womenA === 2 && womenB === 0) || (womenB === 2 && womenA === 0)) score += 450;
         if (!best || score < best.score) best = { ids: [one.id, two.id, three.id, four.id], score, violations };

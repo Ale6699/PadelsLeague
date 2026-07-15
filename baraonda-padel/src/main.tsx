@@ -12,6 +12,7 @@ import { exportTournamentPdf } from './services/pdf';
 import { getStandings } from './services/standings';
 import { tournamentStore } from './storage';
 import './styles.css';
+import './balance.css';
 
 const nav = [
   ['dashboard', 'Panoramica', CalendarDays], ['players', 'Giocatori', Users], ['settings', 'Configurazione', SlidersHorizontal],
