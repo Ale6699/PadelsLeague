@@ -1,13 +1,15 @@
-import { AlertTriangle, FileDown } from 'lucide-react';
+import { AlertTriangle, FileDown, MonitorPlay } from 'lucide-react';
 import { Tournament, fullName } from '../models';
 import { buildSlots, calendarQuality } from '../solver';
 import { MATCH_BALANCE_LABELS, calculateCalendarBalance } from '../services/matchBalance';
+import { isMatchCompleted } from '../services/matchResults';
 
-export function Dashboard({ tournament, exportPdf }: { tournament: Tournament; exportPdf: () => void }) {
+export function Dashboard({ tournament, exportPdf, onOpenDashboard }: { tournament: Tournament; exportPdf: () => void; onOpenDashboard: (matchId: string) => void }) {
   const quality = calendarQuality(tournament); const counts = new Map(tournament.players.map(player => [player.id, 0]));
   const balance = calculateCalendarBalance(tournament);
   tournament.matches.forEach(match => match.players.forEach(id => counts.set(id, (counts.get(id) ?? 0) + 1)));
-  return <><header><div><h1>{tournament.settings.title}</h1><p>{tournament.settings.date} · {tournament.settings.start}–{tournament.settings.end} · 1 campo</p></div><button onClick={exportPdf}><FileDown size={17} /> Esporta PDF</button></header>
+  const currentMatch = tournament.matches.find(match => !isMatchCompleted(match));
+  return <><header><div><h1>{tournament.settings.title}</h1><p>{tournament.settings.date} · {tournament.settings.start}–{tournament.settings.end} · 1 campo</p></div><div className="actions">{currentMatch && <button className="secondary" onClick={() => onOpenDashboard(currentMatch.id)}><MonitorPlay size={17} /> Apri cruscotto</button>}<button onClick={exportPdf}><FileDown size={17} /> Esporta PDF</button></div></header>
     <div className="cards"><div className="card"><b>{tournament.players.length}</b><span>giocatori</span></div><div className="card"><b>{tournament.matches.length}</b><span>partite</span></div><div className="card"><b>{buildSlots(tournament.settings).length}</b><span>slot disponibili</span></div><div className="card warning"><b>{quality.violations}</b><span>segnalazioni</span></div></div>
     <section><h2>Qualità del calendario</h2><div className="quality"><span>Presenze <b>{quality.min}–{quality.max}</b></span><span>Turni consecutivi <b>{quality.consecutive}</b></span><span>Ripetizioni compagno <b>max {quality.maxPartnerRepeats} · media {quality.averagePartnerRepeats.toFixed(1)}</b></span><span>Squilibrio livello <b>{quality.levelImbalance.toFixed(1)}</b></span><span>Coppie miste <b>{quality.mixedPercent}%</b></span></div></section>
     <section><h2>Equilibrio delle partite</h2><p>Equilibrio medio del calendario: <b>{balance.average}/100</b></p><div className="calendar-balance">{(['excellent', 'balanced', 'acceptable', 'unbalanced', 'very_unbalanced'] as const).map(label => <div key={label}><b>{balance.counts[label]}</b><span>{MATCH_BALANCE_LABELS[label]}</span></div>)}</div>{balance.best && <p>Migliore: <b>{balance.best.rating.score}/100</b> · {balance.best.match.start} — Peggiore: <b>{balance.worst!.rating.score}/100</b> · {balance.worst!.match.start}</p>}</section>

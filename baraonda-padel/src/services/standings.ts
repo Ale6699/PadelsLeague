@@ -5,6 +5,7 @@ export function getStandings(tournament: Tournament): Standing[] {
   const rows = tournament.players.map(player => ({ id: player.id, name: fullName(player), points: 0, played: 0, wins: 0, draws: 0, losses: 0, gf: 0, ga: 0 }));
   const byId = new Map(rows.map(row => [row.id, row]));
   tournament.matches.forEach(match => {
+    if (match.status && match.status !== 'completed') return;
     if (!isMatchCompleted(match)) return;
     const outcome = getMatchOutcome(match); const aGames = match.result?.aGames ?? 0; const bGames = match.result?.bGames ?? 0;
     const write = (id: string, points: number, won: boolean, drawn: boolean, gf: number, ga: number) => { const row = byId.get(id)!; row.played += 1; row.points += points; row.gf += gf; row.ga += ga; if (won) row.wins += 1; else if (drawn) row.draws += 1; else row.losses += 1; };

@@ -7,7 +7,8 @@ import { PublicDisplay } from './components/PublicDisplay';
 import { Results } from './components/Results';
 import { Schedule } from './components/Schedule';
 import { SettingsView } from './components/SettingsView';
-import { Tournament, makeTournament } from './models';
+import { MatchStatus, LiveMatchState, Tournament, makeTournament } from './models';
+import { MatchDashboard } from './components/MatchDashboard';
 import { exportTournamentPdf } from './services/pdf';
 import { getStandings } from './services/standings';
 import { tournamentStore } from './storage';
@@ -15,6 +16,7 @@ import './styles.css';
 import './balance.css';
 import './share.css';
 import './results.css';
+import './match-dashboard.css';
 
 const nav = [
   ['dashboard', 'Panoramica', CalendarDays], ['players', 'Giocatori', Users], ['settings', 'Configurazione', SlidersHorizontal],
@@ -24,6 +26,7 @@ const nav = [
 function App() {
   const [tournaments, setTournaments] = useState<Tournament[]>(() => { const saved = tournamentStore.load(); return saved.length ? saved : [makeTournament('Torneo 2026')]; });
   const [activeId, setActiveId] = useState(tournaments[0]?.id ?? ''); const [tab, setTab] = useState<(typeof nav)[number][0]>('dashboard'); const importer = useRef<HTMLInputElement>(null);
+  const [dashboardMatchId, setDashboardMatchId] = useState<string>();
   const tournamentsRef = useRef(tournaments);
   const lastUpdatedRef = useRef(tournamentStore.loadSnapshot().lastUpdated);
   const tournament = tournaments.find(item => item.id === activeId) ?? tournaments[0];
@@ -37,18 +40,21 @@ function App() {
     setActiveId(currentId => snapshot.tournaments.some(item => item.id === currentId) ? currentId : snapshot.tournaments[0]?.id ?? '');
     return true;
   }, []);
-  const update = (change: (tournament: Tournament) => Tournament) => setTournaments(items => items.map(item => item.id === tournament.id ? change(item) : item));
+  const update = useCallback((change: (tournament: Tournament) => Tournament) => setTournaments(items => items.map(item => item.id === tournament.id ? change(item) : item)), [tournament.id]);
   const standings = useMemo(() => getStandings(tournament), [tournament]);
   const create = () => { const next = makeTournament(`Torneo ${tournaments.length + 1}`); setTournaments(items => [...items, next]); setActiveId(next.id); setTab('settings'); };
   const exportJson = () => { const blob = new Blob([JSON.stringify(tournament, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${tournament.name || 'torneo'}.json`; a.click(); URL.revokeObjectURL(url); };
   const importJson = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const imported = JSON.parse(String(reader.result)) as Tournament; if (!imported.settings || !Array.isArray(imported.players) || !Array.isArray(imported.matches)) throw new Error(); const next = { ...imported, id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) }; setTournaments(items => [...items, next]); setActiveId(next.id); setTab('dashboard'); } catch { window.alert('Il file non contiene un torneo Baraonda valido.'); } }; reader.readAsText(file); };
+  const dashboardMatch = tournament?.matches.find(match => match.id === dashboardMatchId);
+  const persistDashboard = useCallback((liveState: LiveMatchState, status: MatchStatus) => { if (!dashboardMatchId) return; update(t => ({ ...t, matches: t.matches.map(match => match.id === dashboardMatchId ? { ...match, liveState, status } : match) })); }, [dashboardMatchId, update]);
   if (!tournament) return null;
+  if (dashboardMatch) return <MatchDashboard tournament={tournament} match={dashboardMatch} index={tournament.matches.findIndex(match => match.id === dashboardMatch.id)} onClose={() => setDashboardMatchId(undefined)} onPersist={persistDashboard} onFinish={(score, liveState) => update(t => ({ ...t, matches: t.matches.map(match => match.id === dashboardMatch.id ? { ...match, liveState, status: 'completed', result: { aGames: score.teamAGames, bGames: score.teamBGames } } : match) }))} onReset={() => update(t => ({ ...t, matches: t.matches.map(match => match.id === dashboardMatch.id ? { ...match, status: 'scheduled', result: { aGames: null, bGames: null } } : match) }))} />;
   return <div className="app"><aside><div className="brand">🎾 <span>Baraonda<br />Padel</span></div><select aria-label="Torneo attivo" value={activeId} onChange={e => setActiveId(e.target.value)}>{tournaments.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button className="new" onClick={create}><Plus size={16} /> Nuovo torneo</button>{nav.map(([id, label, Icon]) => <button className={tab === id ? 'active' : ''} onClick={() => setTab(id)} key={id}><Icon size={18} />{label}</button>)}<div className="sidebar-tools"><button onClick={exportJson}><Download size={16} /> Esporta JSON</button><button onClick={() => importer.current?.click()}><Upload size={16} /> Importa JSON</button><input ref={importer} hidden type="file" accept="application/json" onChange={e => importJson(e.target.files?.[0])} /></div></aside><main>
-    {tab === 'dashboard' && <Dashboard tournament={tournament} exportPdf={() => exportTournamentPdf(tournament)} />}
+    {tab === 'dashboard' && <Dashboard tournament={tournament} exportPdf={() => exportTournamentPdf(tournament)} onOpenDashboard={setDashboardMatchId} />}
     {tab === 'players' && <Players tournament={tournament} update={update} />}
     {tab === 'settings' && <SettingsView tournament={tournament} update={update} />}
-    {tab === 'schedule' && <Schedule tournament={tournament} update={update} />}
-    {tab === 'results' && <Results tournament={tournament} standings={standings} update={update} />}
+    {tab === 'schedule' && <Schedule tournament={tournament} update={update} onOpenDashboard={setDashboardMatchId} />}
+    {tab === 'results' && <Results tournament={tournament} standings={standings} update={update} onOpenDashboard={setDashboardMatchId} />}
     {tab === 'display' && <PublicDisplay tournament={tournament} standings={standings} reloadTournament={reloadTournaments} storageKey={tournamentStore.storageKey} />}
   </main></div>;
 }

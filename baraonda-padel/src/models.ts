@@ -10,13 +10,21 @@ export type Player = {
 };
 /** outcome remains optional only to read tournaments saved by older app versions. */
 export type MatchResult = { aGames: number | null; bGames: number | null; outcome?: 'A' | 'B' | 'D' | '' };
+export type MatchTimerStatus = 'idle' | 'running' | 'paused' | 'expired' | 'completed';
+export type MatchStatus = 'scheduled' | 'in_progress' | 'paused' | 'time_expired' | 'completed' | 'cancelled';
+export type GameScoringMode = 'golden_point' | 'advantages';
+export type PointScore = 0 | 15 | 30 | 40 | 'advantage';
+export type LiveMatchScore = { teamAPoints: PointScore; teamBPoints: PointScore; teamAGames: number; teamBGames: number; lastUpdated: number };
+export type MatchTimerState = { status: MatchTimerStatus; durationMilliseconds: number; remainingMilliseconds: number; startedAt: number | null; endsAt: number | null; updatedAt: number };
+export type ScoreAction = { id: string; timestamp: number; type: 'point_team_a' | 'point_team_b' | 'manual_score_change' | 'reset_current_game' | 'reset_match'; previousScore: LiveMatchScore; nextScore: LiveMatchScore };
+export type LiveMatchState = { timer: MatchTimerState; score: LiveMatchScore; history: ScoreAction[]; redo: ScoreAction[]; servingTeam: 'team_a' | 'team_b'; audioEnabled: boolean };
 export type Match = {
   id: string; start: string; end: string; players: [string, string, string, string];
-  locked: boolean; violations: string[]; result?: MatchResult;
+  locked: boolean; violations: string[]; result?: MatchResult; status?: MatchStatus; liveState?: LiveMatchState;
 };
 export type Settings = {
   title: string; date: string; start: string; end: string; playMinutes: number; warmupMinutes: number;
-  pauses: Pause[]; targetMatchesPerPlayer: number; prioritizeMixed: boolean;
+  pauses: Pause[]; targetMatchesPerPlayer: number; prioritizeMixed: boolean; gameScoringMode?: GameScoringMode; maxGamesPerMatch?: number;
 };
 export type Tournament = {
   id: string; name: string; settings: Settings; players: Player[]; matches: Match[];
