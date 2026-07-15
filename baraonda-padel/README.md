@@ -18,6 +18,34 @@ npm run build
 npm test
 ```
 
+## Supabase e sincronizzazione multi-dispositivo
+
+Supabase è il provider primario quando le credenziali sono configurate; senza
+credenziali l'app rimane utilizzabile in modalità demo locale (`localStorage`).
+
+```bash
+cp .env.example .env.local
+# inserire VITE_SUPABASE_URL e VITE_SUPABASE_PUBLISHABLE_KEY
+npm install
+npm run supabase:start       # ambiente locale opzionale
+npm run supabase:reset       # applica migrazioni e seed in locale
+npm run supabase:types       # rigenera src/types/supabase.ts
+npm run dev
+```
+
+Per un progetto ospitato, collega prima la CLI con `supabase link` e poi usa
+`npm run supabase:push`. Le migrazioni creano schema, indici, view pubbliche,
+versionamento, funzioni RPC atomiche e canali Realtime per tornei, giocatori,
+partite e pause. Alla prima connessione a un database vuoto, i tornei locali
+vengono importati in una transazione e gli identificativi legacy sono convertiti
+in UUID.
+
+Non inserire mai `SUPABASE_SERVICE_ROLE_KEY` nel client. Le policy RLS incluse
+sono volutamente aperte per il prototipo/demo: prima di pubblicare il progetto
+sostituiscile con policy basate su `auth.uid()` e limita le scritture agli
+organizzatori. L'URL e la publishable/anon key sono le sole variabili esposte
+da Vite.
+
 ## Funzioni incluse
 
 - più tornei salvati nel browser;

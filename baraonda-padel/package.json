@@ -7,13 +7,20 @@
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",
-    "test": "vitest run"
+    "test": "vitest run",
+    "supabase:start": "supabase start",
+    "supabase:stop": "supabase stop",
+    "supabase:status": "supabase status",
+    "supabase:reset": "supabase db reset",
+    "supabase:push": "supabase db push",
+    "supabase:types": "supabase gen types typescript --local --schema public > src/types/supabase.ts"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
     "vite": "latest",
     "react": "latest",
     "react-dom": "latest",
+    "@supabase/supabase-js": "^2.57.4",
     "lucide-react": "latest",
     "jspdf": "latest",
     "jspdf-autotable": "latest"
@@ -22,6 +29,7 @@
     "@types/react": "latest",
     "@types/react-dom": "latest",
     "typescript": "^5.7.2",
-    "vitest": "^3.0.5"
+    "vitest": "^3.0.5",
+    "supabase": "^2.57.4"
   }
 }
