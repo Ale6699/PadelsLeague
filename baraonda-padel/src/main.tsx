@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { CalendarDays, Download, Plus, SlidersHorizontal, Trophy, Tv, Upload, Users, Shuffle } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
@@ -19,10 +19,22 @@ const nav = [
 ] as const;
 
 function App() {
-  const [tournaments, setTournaments] = useState<Tournament[]>(() => tournamentStore.load().length ? tournamentStore.load() : [makeTournament('Torneo 2026')]);
+  const [tournaments, setTournaments] = useState<Tournament[]>(() => { const saved = tournamentStore.load(); return saved.length ? saved : [makeTournament('Torneo 2026')]; });
   const [activeId, setActiveId] = useState(tournaments[0]?.id ?? ''); const [tab, setTab] = useState<(typeof nav)[number][0]>('dashboard'); const importer = useRef<HTMLInputElement>(null);
+  const tournamentsRef = useRef(tournaments);
+  const lastUpdatedRef = useRef(tournamentStore.loadSnapshot().lastUpdated);
   const tournament = tournaments.find(item => item.id === activeId) ?? tournaments[0];
-  useEffect(() => tournamentStore.save(tournaments), [tournaments]);
+  useEffect(() => { tournamentsRef.current = tournaments; lastUpdatedRef.current = tournamentStore.save(tournaments); }, [tournaments]);
+  const reloadTournaments = useCallback(() => {
+    const snapshot = tournamentStore.loadSnapshot();
+    if (snapshot.lastUpdated && snapshot.lastUpdated === lastUpdatedRef.current) return false;
+    if (JSON.stringify(snapshot.tournaments) === JSON.stringify(tournamentsRef.current)) return false;
+    tournamentsRef.current = snapshot.tournaments;
+    lastUpdatedRef.current = snapshot.lastUpdated;
+    setTournaments(snapshot.tournaments);
+    setActiveId(currentId => snapshot.tournaments.some(item => item.id === currentId) ? currentId : snapshot.tournaments[0]?.id ?? '');
+    return true;
+  }, []);
   const update = (change: (tournament: Tournament) => Tournament) => setTournaments(items => items.map(item => item.id === tournament.id ? change(item) : item));
   const standings = useMemo(() => getStandings(tournament), [tournament]);
   const create = () => { const next = makeTournament(`Torneo ${tournaments.length + 1}`); setTournaments(items => [...items, next]); setActiveId(next.id); setTab('settings'); };
@@ -35,7 +47,7 @@ function App() {
     {tab === 'settings' && <SettingsView tournament={tournament} update={update} />}
     {tab === 'schedule' && <Schedule tournament={tournament} update={update} />}
     {tab === 'results' && <Results tournament={tournament} standings={standings} update={update} />}
-    {tab === 'display' && <PublicDisplay tournament={tournament} standings={standings} />}
+    {tab === 'display' && <PublicDisplay tournament={tournament} standings={standings} reloadTournament={reloadTournaments} storageKey={tournamentStore.storageKey} />}
   </main></div>;
 }
 
