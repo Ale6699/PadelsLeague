@@ -13,6 +13,7 @@ import { getStandings } from './services/standings';
 import { tournamentStore } from './storage';
 import './styles.css';
 import './balance.css';
+import './share.css';
 
 const nav = [
   ['dashboard', 'Panoramica', CalendarDays], ['players', 'Giocatori', Users], ['settings', 'Configurazione', SlidersHorizontal],
