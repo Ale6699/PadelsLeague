@@ -41,6 +41,15 @@ export class SupabaseTournamentRepository implements TournamentRepository {
     if (constraints.length) { const { error } = await client.from('player_constraints').insert(constraints); if (error) return fail(error); }
     const { error: deleteBreaksError } = await client.from('tournament_breaks').delete().eq('tournament_id', tournament.id); if (deleteBreaksError) return fail(deleteBreaksError);
     if (tournament.settings.pauses.length) { const { error } = await client.from('tournament_breaks').insert(tournament.settings.pauses.map(pause => ({ tournament_id: tournament.id, starts_at: `${tournament.settings.date}T${pause.from}:00`, ends_at: `${tournament.settings.date}T${pause.to}:00` }))); if (error) return fail(error); }
+    // Matches removed locally (cleared, regenerated with fewer slots) were never deleted
+    // here before: upsert only adds/updates, so stale rows lingered in the DB and came
+    // back on the next realtime reload, making a cleared/regenerated calendar look like it
+    // "reverted" to the old one.
+    const currentMatchIds = tournament.matches.map(match => match.id);
+    const { error: staleMatchesError } = currentMatchIds.length
+      ? await client.from('matches').delete().eq('tournament_id', tournament.id).not('id', 'in', `(${currentMatchIds.join(',')})`)
+      : await client.from('matches').delete().eq('tournament_id', tournament.id);
+    if (staleMatchesError) return fail(staleMatchesError);
     const mappedMatches = tournament.matches.map((match, index) => ({ match, payload: mapMatchDomainToInsert(match, tournament.id, index + 1, tournament.settings.date) }));
     const matchesWithoutLiveState = mappedMatches.filter(item => !item.match.liveState).map(item => item.payload);
     if (matchesWithoutLiveState.length) { const { error: matchesError } = await client.from('matches').upsert(matchesWithoutLiveState); if (matchesError) return fail(matchesError); }

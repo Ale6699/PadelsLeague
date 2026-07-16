@@ -31,6 +31,16 @@ function isMixedTeam(first: Player | undefined, second: Player | undefined) {
   return first?.gender !== 'Altro' && second?.gender !== 'Altro' && Boolean(first?.gender && second?.gender && first.gender !== second.gender);
 }
 
+/** Pure score arithmetic, shared with the solver's hot loop so the two can never drift. */
+export function balanceScoreFromLevels(a1: number, a2: number, b1: number, b2: number, bothTeamsMixed: boolean): number {
+  const strengthDifference = Math.abs(a1 + a2 - b1 - b2);
+  const internalPenalty = (Math.abs(a1 - a2) + Math.abs(b1 - b2)) * 3;
+  const advancedVsBeginners = (a1 === 3 && a2 === 3 && b1 === 1 && b2 === 1) || (b1 === 3 && b2 === 3 && a1 === 1 && a2 === 1);
+  let score = 100 - strengthDifference * 20 - internalPenalty + (bothTeamsMixed ? 2 : 0);
+  if (advancedVsBeginners) score = Math.min(score, 35);
+  return clamp(score);
+}
+
 export function calculateMatchBalance(match: Match, players: Player[]): MatchBalanceRating {
   const playerById = new Map(players.map(player => [player.id, player]));
   const selected = match.players.map(id => playerById.get(id));
@@ -43,11 +53,7 @@ export function calculateMatchBalance(match: Match, players: Player[]): MatchBal
   if (selected.some(player => !player || !validLevels.has(player.level))) warnings.push('Il livello di uno o più giocatori non è definito. È stato utilizzato il livello intermedio.');
   const advancedVsBeginners = (a1 === 3 && a2 === 3 && b1 === 1 && b2 === 1) || (b1 === 3 && b2 === 3 && a1 === 1 && a2 === 1);
   if (advancedVsBeginners) warnings.push('Due giocatori avanzati non possono giocare contro due principianti.');
-  const internalPenalty = (teamAInternalDifference + teamBInternalDifference) * 3;
-  const mixedTeamsBonus = isMixedTeam(selected[0], selected[1]) && isMixedTeam(selected[2], selected[3]) ? 2 : 0;
-  let score = 100 - strengthDifference * 20 - internalPenalty + mixedTeamsBonus;
-  if (advancedVsBeginners) score = Math.min(score, 35);
-  score = clamp(score);
+  const score = balanceScoreFromLevels(a1, a2, b1, b2, isMixedTeam(selected[0], selected[1]) && isMixedTeam(selected[2], selected[3]));
   const label: MatchBalanceLabel = score >= 90 ? 'excellent' : score >= 75 ? 'balanced' : score >= 60 ? 'acceptable' : score >= 40 ? 'unbalanced' : 'very_unbalanced';
   if (score < 60 && !advancedVsBeginners) warnings.push(`Rating di equilibrio basso: ${score}/100.`);
   const forceExplanation = strengthDifference === 0 ? 'Le due coppie hanno la stessa forza complessiva.' : `La coppia A ha una forza stimata di ${teamAStrength}, mentre la coppia B ha una forza stimata di ${teamBStrength}.`;
