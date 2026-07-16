@@ -21,7 +21,7 @@ export class SupabaseTournamentRepository implements TournamentRepository {
       if (playerError || matchError || breakError || constraintError) return fail(playerError ?? matchError ?? breakError ?? constraintError);
       const playerIds = (playerRows ?? []).map(player => player.id); const { data: availabilityRows, error: availabilityError } = playerIds.length ? await client.from('player_availability').select('*').in('player_id', playerIds) : { data: [], error: null };
       if (availabilityError) return fail(availabilityError);
-      tournament.players = (playerRows ?? []).map(mapPlayerRowToDomain); tournament.matches = (matchRows ?? []).map(mapMatchRowToDomain); tournament.settings.pauses = (breakRows ?? []).map(item => ({ from: new Date(item.starts_at).toTimeString().slice(0, 5), to: new Date(item.ends_at).toTimeString().slice(0, 5) }));
+      tournament.players = (playerRows ?? []).map(mapPlayerRowToDomain); tournament.matches = (matchRows ?? []).map(mapMatchRowToDomain); tournament.settings.pauses = (breakRows ?? []).map(item => ({ from: new Date(item.starts_at).toISOString().slice(11, 16), to: new Date(item.ends_at).toISOString().slice(11, 16) }));
       (availabilityRows ?? []).forEach(item => { const player = tournament.players.find(candidate => candidate.id === item.player_id); if (player) player.availability.push(mapAvailabilityRowToDomain(item)); });
       (constraintRows ?? []).forEach(item => { const player = tournament.players.find(candidate => candidate.id === item.player_a_id); if (player) player.avoidPartners.push(item.player_b_id); });
       return tournament;
