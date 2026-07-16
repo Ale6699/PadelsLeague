@@ -1,12 +1,14 @@
 import { Tournament } from './models';
+import { normalizeLiveMatchState } from './services/liveMatch';
 
 export type TournamentSnapshot = { tournaments: Tournament[]; lastUpdated: number };
 const scoreOrNull = (value: unknown) => typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 6 ? value : null;
 const normalizeTournaments = (tournaments: Tournament[]) => tournaments.map(tournament => ({ ...tournament, matches: tournament.matches.map(match => {
-  if (!match.result) return match;
+  const liveState = match.liveState ? normalizeLiveMatchState(match.liveState, tournament.settings.playMinutes, tournament.settings.maxGamesPerMatch) : undefined;
+  if (!match.result) return { ...match, liveState };
   const aGames = scoreOrNull(match.result.aGames); const bGames = scoreOrNull(match.result.bGames);
   // Preserve winner-only historical data, but scores become the sole source as soon as either score exists.
-  return aGames === null && bGames === null && match.result.outcome ? { ...match, result: { aGames, bGames, outcome: match.result.outcome } } : { ...match, result: { aGames, bGames } };
+  return aGames === null && bGames === null && match.result.outcome ? { ...match, liveState, result: { aGames, bGames, outcome: match.result.outcome } } : { ...match, liveState, result: { aGames, bGames } };
 }) }));
 
 export interface TournamentStore {

@@ -1,23 +1,72 @@
 import { describe, expect, it } from 'vitest';
-import { LiveMatchScore } from '../models';
-import { addScoreAction, awardPoint, createLiveMatchState, restorePersistedTimer, undoScoreAction, validateLiveMatchScore } from '../services/liveMatch';
+import { AdvantageTeam, LiveMatchScore } from '../models';
+import { addScoreAction, awardPoint, createLiveMatchState, normalizeLiveMatchScore, redoScoreAction, restorePersistedTimer, undoScoreAction, validateLiveMatchScore } from '../services/liveMatch';
 
-const score = (a: LiveMatchScore['teamAPoints'] = 0, b: LiveMatchScore['teamBPoints'] = 0, gamesA = 0, gamesB = 0): LiveMatchScore => ({ teamAPoints: a, teamBPoints: b, teamAGames: gamesA, teamBGames: gamesB, lastUpdated: 0 });
+const score = (a: LiveMatchScore['teamAPoints'] = 0, b: LiveMatchScore['teamBPoints'] = 0, gamesA = 0, gamesB = 0, advantageTeam: AdvantageTeam = null, lastUpdated = 0): LiveMatchScore => ({ teamAPoints: a, teamBPoints: b, advantageTeam, teamAGames: gamesA, teamBGames: gamesB, lastUpdated });
 
-describe('punteggio live padel', () => {
-  it('avanza da 0 a game e azzera i punti', () => {
-    let next = score(); [15, 30, 40].forEach(() => { next = awardPoint(next, 'team_a'); }); expect(next.teamAPoints).toBe(40);
-    next = awardPoint(next, 'team_a'); expect(next.teamAGames).toBe(1); expect(next.teamAPoints).toBe(0); expect(next.teamBPoints).toBe(0);
+describe('punteggio live con vantaggi', () => {
+  it('mantiene la sequenza 0, 15, 30, 40 e assegna il game prima della parità', () => {
+    let next = score();
+    next = awardPoint(next, 'team_a'); expect(next.teamAPoints).toBe(15);
+    next = awardPoint(next, 'team_a'); expect(next.teamAPoints).toBe(30);
+    next = awardPoint(next, 'team_a'); expect(next.teamAPoints).toBe(40);
+    next = awardPoint(next, 'team_a');
+    expect(next).toMatchObject({ teamAGames: 1, teamAPoints: 0, teamBPoints: 0, advantageTeam: null });
   });
-  it('assegna il game con golden point sul 40 pari', () => { const next = awardPoint(score(40, 40), 'team_a', 'golden_point'); expect(next.teamAGames).toBe(1); });
-  it('gestisce i vantaggi', () => {
-    let next = awardPoint(score(40, 40), 'team_a', 'advantages'); expect(next.teamAPoints).toBe('advantage');
-    next = awardPoint(next, 'team_b', 'advantages'); expect(next.teamAPoints).toBe(40); expect(next.teamBPoints).toBe(40);
-    next = awardPoint(next, 'team_b', 'advantages'); next = awardPoint(next, 'team_b', 'advantages'); expect(next.teamBGames).toBe(1);
+
+  it('arriva al 40–40 senza assegnare un vantaggio', () => {
+    expect(awardPoint(score(40, 30), 'team_b')).toMatchObject({ teamAPoints: 40, teamBPoints: 40, advantageTeam: null });
   });
-  it('non supera il limite massimo di game automatico', () => { const next = awardPoint(score(40, 30, 6, 1), 'team_a', 'golden_point', 6); expect(next.teamAGames).toBe(6); });
-  it('annulla anche un punto che aveva assegnato un game', () => { const live = createLiveMatchState(); const afterGame = awardPoint(score(40, 30), 'team_a'); const withAction = addScoreAction(live, 'point_team_a', afterGame); expect(undoScoreAction(withAction).score).toMatchObject({ teamAGames: 0, teamAPoints: 0 }); });
-  it('valida la correzione manuale', () => { expect(validateLiveMatchScore(score('advantage', 'advantage'))).toBe(false); expect(validateLiveMatchScore(score(40, 30, 7))).toBe(false); expect(validateLiveMatchScore(score(40, 30, 6))).toBe(true); });
+
+  it('assegna vantaggio A e poi il game A con due punti consecutivi', () => {
+    const advantage = awardPoint(score(40, 40), 'team_a');
+    expect(advantage).toMatchObject({ teamAPoints: 40, teamBPoints: 40, advantageTeam: 'team_a' });
+    expect(awardPoint(advantage, 'team_a')).toMatchObject({ teamAGames: 1, teamAPoints: 0, teamBPoints: 0, advantageTeam: null });
+  });
+
+  it('annulla il vantaggio avversario prima di assegnare il proprio', () => {
+    const deuce = awardPoint(score(40, 40, 0, 0, 'team_a'), 'team_b');
+    expect(deuce.advantageTeam).toBeNull();
+    expect(awardPoint(deuce, 'team_b').advantageTeam).toBe('team_b');
+  });
+
+  it('gestisce uno scambio prolungato fino al game A', () => {
+    let next = score(40, 40);
+    const winners: Array<'team_a' | 'team_b'> = ['team_a', 'team_b', 'team_b', 'team_a', 'team_a', 'team_b', 'team_a', 'team_a'];
+    const expected: AdvantageTeam[] = ['team_a', null, 'team_b', null, 'team_a', null, 'team_a', null];
+    winners.forEach((winner, index) => { next = awardPoint(next, winner); expect(next.advantageTeam).toBe(expected[index]); });
+    expect(next).toMatchObject({ teamAGames: 1, teamAPoints: 0, teamBPoints: 0 });
+  });
+
+  it('non modifica lo stato ricevuto e non supera il massimo dei game', () => {
+    const original = score(40, 30, 6, 1);
+    const snapshot = { ...original };
+    const next = awardPoint(original, 'team_a', 6);
+    expect(original).toEqual(snapshot);
+    expect(next.teamAGames).toBe(6);
+  });
+
+  it('undo e redo del game ripristinano vantaggio, timestamp e servizio', () => {
+    const live = { ...createLiveMatchState(), score: score(40, 40, 2, 1, 'team_a', 123), servingTeam: 'team_a' as const };
+    const afterGame = awardPoint(live.score, 'team_a');
+    const withAction = addScoreAction(live, 'point_team_a', afterGame);
+    const undone = undoScoreAction(withAction);
+    expect(undone.score).toEqual(live.score);
+    expect(undone.servingTeam).toBe('team_a');
+    const redone = redoScoreAction(undone);
+    expect(redone.score).toEqual(afterGame);
+    expect(redone.servingTeam).toBe('team_b');
+  });
+
+  it('rifiuta vantaggi fuori dal 40–40 e game non validi', () => {
+    expect(validateLiveMatchScore(score(40, 30, 0, 0, 'team_a')).valid).toBe(false);
+    expect(validateLiveMatchScore(score(40, 40, 7, 0, 'team_a'), 6).valid).toBe(false);
+    expect(validateLiveMatchScore(score(40, 40, 6, 0, 'team_b'), 6).valid).toBe(true);
+  });
+
+  it('normalizza i vecchi salvataggi con advantage nei punti', () => {
+    expect(normalizeLiveMatchScore({ teamAPoints: 'advantage', teamBPoints: 40, teamAGames: 2, teamBGames: 1, lastUpdated: 10 })).toEqual(score(40, 40, 2, 1, 'team_a', 10));
+  });
 });
 
 describe('timer persistito', () => {

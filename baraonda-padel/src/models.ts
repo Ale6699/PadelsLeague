@@ -12,12 +12,16 @@ export type Player = {
 export type MatchResult = { aGames: number | null; bGames: number | null; outcome?: 'A' | 'B' | 'D' | '' };
 export type MatchTimerStatus = 'idle' | 'running' | 'paused' | 'expired' | 'completed';
 export type MatchStatus = 'scheduled' | 'in_progress' | 'paused' | 'time_expired' | 'completed' | 'cancelled';
-export type GameScoringMode = 'golden_point' | 'advantages';
-export type PointScore = 0 | 15 | 30 | 40 | 'advantage';
-export type LiveMatchScore = { teamAPoints: PointScore; teamBPoints: PointScore; teamAGames: number; teamBGames: number; lastUpdated: number };
+export type GameScoringMode = 'advantages';
+export type TournamentStatus = 'draft' | 'scheduled' | 'in_progress' | 'completed' | 'cancelled';
+export type PadelPointValue = 0 | 15 | 30 | 40;
+export type PointScore = PadelPointValue;
+export type AdvantageTeam = 'team_a' | 'team_b' | null;
+export type LiveMatchScore = { teamAPoints: PadelPointValue; teamBPoints: PadelPointValue; advantageTeam: AdvantageTeam; teamAGames: number; teamBGames: number; lastUpdated: number };
+export type LiveScoreValidationResult = { valid: boolean; errors: string[] };
 export type MatchTimerState = { status: MatchTimerStatus; durationMilliseconds: number; remainingMilliseconds: number; startedAt: number | null; endsAt: number | null; updatedAt: number };
-export type ScoreAction = { id: string; timestamp: number; type: 'point_team_a' | 'point_team_b' | 'manual_score_change' | 'reset_current_game' | 'reset_match'; previousScore: LiveMatchScore; nextScore: LiveMatchScore };
-export type LiveMatchState = { timer: MatchTimerState; score: LiveMatchScore; history: ScoreAction[]; redo: ScoreAction[]; servingTeam: 'team_a' | 'team_b'; audioEnabled: boolean };
+export type ScoreAction = { id: string; timestamp: number; type: 'point_team_a' | 'point_team_b' | 'manual_score_change' | 'reset_current_game' | 'reset_match'; previousScore: LiveMatchScore; nextScore: LiveMatchScore; previousServingTeam: 'team_a' | 'team_b'; nextServingTeam: 'team_a' | 'team_b' };
+export type LiveMatchState = { timer: MatchTimerState; score: LiveMatchScore; history: ScoreAction[]; redo: ScoreAction[]; servingTeam: 'team_a' | 'team_b'; audioEnabled: boolean; lastUpdated: number };
 export type Match = {
   id: string; start: string; end: string; players: [string, string, string, string];
   locked: boolean; violations: string[]; result?: MatchResult; status?: MatchStatus; liveState?: LiveMatchState;
@@ -28,7 +32,9 @@ export type Settings = {
 };
 export type Tournament = {
   id: string; name: string; settings: Settings; players: Player[]; matches: Match[];
-  previousMatches?: Match[]; isPublic?: boolean;
+  previousMatches?: Match[]; isPublic?: boolean; ownerId?: string; notes?: string;
+  status?: TournamentStatus; publicSlug?: string; version?: number; updatedAt?: string;
+  scheduleNeedsRegeneration?: boolean; timerSoundEnabled?: boolean;
 };
 export type Standing = { id: string; name: string; points: number; played: number; wins: number; draws: number; losses: number; gf: number; ga: number; coinToss?: boolean };
 export type Quality = { min: number; max: number; consecutive: number; maxPartnerRepeats: number; averagePartnerRepeats: number; levelImbalance: number; violations: number; mixedPercent: number };
@@ -43,8 +49,11 @@ export const fullName = (player: Player) => `${player.firstName} ${player.lastNa
 export const defaultSettings: Settings = {
   title: 'Baraonda Padel Sistemi Tre', date: new Date().toISOString().slice(0, 10), start: '10:00', end: '19:00',
   playMinutes: 12, warmupMinutes: 3, pauses: [], targetMatchesPerPlayer: 8, prioritizeMixed: true,
+  gameScoringMode: 'advantages', maxGamesPerMatch: 6,
 };
 
-export const makeTournament = (name = 'Nuovo torneo'): Tournament => ({
-  id: uid(), name, settings: { ...defaultSettings, pauses: [] }, players: [], matches: [],
+export const makeTournament = (name = 'Nuovo torneo', ownerId?: string): Tournament => ({
+  id: uid(), name, ownerId, status: 'draft', notes: '', isPublic: false, version: 1,
+  scheduleNeedsRegeneration: false, timerSoundEnabled: true,
+  settings: { ...defaultSettings, pauses: [] }, players: [], matches: [],
 });

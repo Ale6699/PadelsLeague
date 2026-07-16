@@ -11,4 +11,9 @@ describe('mapAuthError', () => {
     expect(mapAuthError(new Error('rate limit exceeded')).code).toBe('too_many_requests');
     expect(mapAuthError(new Error('OTP expired')).code).toBe('expired_link');
   });
+  it('maps registration-specific failures', () => {
+    expect(mapAuthError(new Error('User already registered')).code).toBe('email_already_registered');
+    expect(mapAuthError(new Error('Signups not allowed')).code).toBe('signup_disabled');
+    expect(mapAuthError(new Error('Invalid email address')).code).toBe('invalid_email');
+  });
 });
