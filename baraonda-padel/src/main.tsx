@@ -54,11 +54,60 @@ function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: strin
   const tournamentsRef = useRef(tournaments);
   const lastUpdatedRef = useRef(tournamentStore.loadSnapshot().lastUpdated);
   const skipNextRemoteSaveRef = useRef(false);
+  const savingRef = useRef(false);
+  const pendingSaveRef = useRef(false);
+  const saveTimerRef = useRef<number | undefined>(undefined);
+  const reloadTimerRef = useRef<number | undefined>(undefined);
+  const reloadRequestedRef = useRef(false);
+  const localEditVersionRef = useRef(0);
+  const saveScheduled = useCallback(() => savingRef.current || pendingSaveRef.current || saveTimerRef.current !== undefined, []);
+  // Every save echoes back as a burst of realtime events (one per touched table). The
+  // reload is debounced to collapse the burst into a single list(), and skipped while a
+  // local save is in flight or scheduled: local state is ahead of the server then, and
+  // applying the server snapshot would wipe the edits being saved. A reload requested
+  // during a save runs once the queue drains; a reload that resolves after a newer local
+  // edit is discarded for the same reason.
+  const reloadFromProvider = useCallback(() => {
+    if (dataProvider.kind !== 'supabase') return;
+    if (saveScheduled()) { reloadRequestedRef.current = true; return; }
+    if (reloadTimerRef.current !== undefined) window.clearTimeout(reloadTimerRef.current);
+    reloadTimerRef.current = window.setTimeout(() => {
+      reloadTimerRef.current = undefined;
+      const editVersionAtRequest = localEditVersionRef.current;
+      void dataProvider.list().then(items => {
+        if (!items.length || editVersionAtRequest !== localEditVersionRef.current || saveScheduled()) return;
+        setTournaments(current => { if (JSON.stringify(current) === JSON.stringify(items)) return current; skipNextRemoteSaveRef.current = true; setActiveId(currentId => items.some(item => item.id === currentId) ? currentId : items[0]?.id ?? ''); return items; });
+      }).catch(error => setSyncError(isAppError(error) ? error.message : 'Connessione instabile.'));
+    }, 400);
+  }, [saveScheduled]);
+  // Supabase saves fully replace availability/constraints/breaks for the tournament on
+  // every call. Overlapping calls can resolve out of order and let a stale snapshot
+  // clobber a newer one, so saves are serialized: at most one in flight, and any
+  // change that arrives meanwhile is coalesced into a single follow-up save of the
+  // latest state instead of firing its own overlapping request.
+  const flushSave = useCallback(() => {
+    if (saveTimerRef.current !== undefined) { window.clearTimeout(saveTimerRef.current); saveTimerRef.current = undefined; }
+    if (savingRef.current) { pendingSaveRef.current = true; return; }
+    savingRef.current = true;
+    dataProvider.save(tournamentsRef.current).catch(error => setSyncError(isAppError(error) ? error.message : 'Errore di salvataggio.')).finally(() => {
+      savingRef.current = false;
+      if (pendingSaveRef.current) { pendingSaveRef.current = false; flushSave(); }
+      else if (reloadRequestedRef.current) { reloadRequestedRef.current = false; reloadFromProvider(); }
+    });
+  }, [reloadFromProvider]);
   const tournament = requestedTournamentId ? tournaments.find(item => item.id === requestedTournamentId) : tournaments.find(item => item.id === activeId) ?? tournaments[0];
   useEffect(() => { let disposed = false; dataProvider.list().then(async items => {
     if (!disposed) { const loaded = items.length ? items : (isLocalDemo ? [makeTournament('Torneo 2026', user?.id)] : []); skipNextRemoteSaveRef.current = true; setTournaments(loaded); setActiveId(requestedTournamentId && loaded.some(item => item.id === requestedTournamentId) ? requestedTournamentId : loaded[0]?.id ?? ''); setHydrated(true); }
   }).catch(error => { if (!disposed) { skipNextRemoteSaveRef.current = true; setSyncError(isAppError(error) ? error.message : 'Non è stato possibile caricare i tornei.'); setHydrated(true); } }).finally(() => { if (!disposed) setLoading(false); }); return () => { disposed = true; }; }, [requestedTournamentId, user?.id]);
-  useEffect(() => { tournamentsRef.current = tournaments; if (isLocalDemo) lastUpdatedRef.current = tournamentStore.save(tournaments); if (hydrated && dataProvider.kind === 'supabase') { if (skipNextRemoteSaveRef.current) { skipNextRemoteSaveRef.current = false; return; } dataProvider.save(tournaments).catch(error => setSyncError(isAppError(error) ? error.message : 'Errore di salvataggio.')); } }, [hydrated, tournaments]);
+  // Autosave is debounced so a burst of edits (typing, quick select changes) coalesces
+  // into one write instead of one write per change.
+  useEffect(() => { tournamentsRef.current = tournaments; if (isLocalDemo) lastUpdatedRef.current = tournamentStore.save(tournaments); if (hydrated && dataProvider.kind === 'supabase') { if (skipNextRemoteSaveRef.current) { skipNextRemoteSaveRef.current = false; return; } localEditVersionRef.current += 1; if (saveTimerRef.current !== undefined) window.clearTimeout(saveTimerRef.current); saveTimerRef.current = window.setTimeout(() => { saveTimerRef.current = undefined; flushSave(); }, 600); } }, [hydrated, tournaments, flushSave]);
+  // The debounce must not lose the last edit when the user closes or switches tab.
+  useEffect(() => {
+    const flushOnHide = () => { if (document.visibilityState === 'hidden' && saveTimerRef.current !== undefined) flushSave(); };
+    document.addEventListener('visibilitychange', flushOnHide);
+    return () => document.removeEventListener('visibilitychange', flushOnHide);
+  }, [flushSave]);
   const reloadTournaments = useCallback(() => {
     if (!isLocalDemo) return false;
     const snapshot = tournamentStore.reloadTournament(lastUpdatedRef.current, tournamentsRef.current);
@@ -69,7 +118,6 @@ function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: strin
     setActiveId(currentId => snapshot.tournaments.some(item => item.id === currentId) ? currentId : snapshot.tournaments[0]?.id ?? '');
     return true;
   }, []);
-  const reloadFromProvider = useCallback(() => { if (dataProvider.kind !== 'supabase') return; void dataProvider.list().then(items => { setTournaments(current => { if (JSON.stringify(current) === JSON.stringify(items)) return current; skipNextRemoteSaveRef.current = true; setActiveId(currentId => items.some(item => item.id === currentId) ? currentId : items[0]?.id ?? ''); return items; }); }).catch(error => setSyncError(isAppError(error) ? error.message : 'Connessione instabile.')); }, []);
   const update = useCallback((change: (tournament: Tournament) => Tournament) => setTournaments(items => items.map(item => item.id === activeId ? change(item) : item)), [activeId]);
   const standings = useMemo(() => tournament ? getStandings(tournament) : [], [tournament]);
   const canLeaveForm = () => !formDirty || window.confirm('Hai modifiche non salvate. Vuoi davvero uscire?');
