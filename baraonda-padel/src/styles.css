@@ -37,3 +37,28 @@ button { cursor: pointer; border: 0; border-radius: 10px; padding: 10px 14px; ba
 .tournament-actions > div { position: absolute; z-index: 20; right: 0; top: calc(100% + 6px); width: 210px; display: grid; gap: 6px; padding: 8px; border-radius: 12px; background: #fff; box-shadow: 0 12px 35px #17302a30; }
 .tournament-actions button { justify-content: flex-start; }
 @media (max-width: 580px) { .delete-summary { grid-template-columns: 1fr 1fr; } .modal-actions button { width: 100%; } .change-list li { display: grid; } }
+/* Public tournament routed views */
+.public-heading { display: block; margin-bottom: 8px; }
+.public-heading p { margin-bottom: 0; }
+.public-mobile-tabs, .public-schedule-view { display: none; }
+.public-routed .public-mobile-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; max-width: 500px; margin: 18px auto; padding: 4px; border: 1px solid #ffffff28; border-radius: 13px; background: #0c3027d9; }
+.public-routed .public-mobile-tabs button { min-width: 0; padding: 8px 10px; background: transparent; color: #dcebe6; }
+.public-routed .public-mobile-tabs button.active { background: #fff; color: #17302a; }
+.public-routed .public-view, .public-routed .public-desktop-upcoming { display: none; }
+.public-routed[data-mobile-view="live"] .public-live-view,
+.public-routed[data-mobile-view="schedule"] .public-schedule-view,
+.public-routed[data-mobile-view="standings"] .public-standings-view { display: block; }
+.public-routed .public-schedule-view { max-width: 820px; margin: 0 auto; }
+.public-schedule-list { display: grid; gap: 10px; }
+.public-schedule-list article { display: grid; grid-template-columns: 58px 1fr auto; align-items: center; gap: 12px; padding: 13px; border-radius: 12px; background: #ffffff12; text-align: left; }
+.public-schedule-list time, .public-schedule-list article > div { display: grid; gap: 2px; }
+.public-schedule-list time { font-size: 18px; font-weight: 900; }
+.public-schedule-list time small, .public-schedule-list article > div small { color: #cfe5df; font-size: 11px; }
+.public-schedule-list article > div span { color: #cfe5df; font-size: 12px; }
+.public-match-state { padding: 5px 7px; border-radius: 999px; background: #ffffff18; font-size: 11px; font-weight: 900; }
+.public-empty { padding: 50px 20px; }
+.public-standings-view li { display: grid; grid-template-columns: 36px 1fr auto; align-items: center; gap: 10px; }
+.public-standings-view li > span:nth-child(2) { display: grid; }
+.public-standings-view li small { color: #cfe5df; font-size: 12px; }
+.public-position { color: #ffc562; font-weight: 900; }
+@media (max-width: 767px) { .public-routed { min-height: 100dvh; border-radius: 0; padding: 24px 14px; } .public-heading h1 { font-size: 29px; } .public-refresh { position: static; justify-items: center; margin-bottom: 18px; text-align: center; } .public-routed .public-mobile-tabs { position: sticky; z-index: 10; top: 8px; } .public-schedule-list article { grid-template-columns: 50px minmax(0, 1fr); } .public-schedule-list article > :last-child { grid-column: 1 / -1; justify-self: start; } }

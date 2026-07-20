@@ -32,6 +32,7 @@ import { TournamentSaveChoice } from './components/tournaments/TournamentForm';
 import { applyTournamentFormValues, getTournamentChanges } from './domain/tournaments/tournamentChanges';
 import { defaultTournamentSlug } from './data/mappers/tournament.mapper';
 import { generateSchedule } from './solver';
+import { publicScheduleUrl } from './publicView';
 import './styles.css';
 import './balance.css';
 import './share.css';
@@ -120,6 +121,33 @@ function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: strin
     return true;
   }, []);
   const update = useCallback((change: (tournament: Tournament) => Tournament) => setTournaments(items => items.map(item => item.id === activeId ? change(item) : item)), [activeId]);
+  const generatePublicScheduleLink = useCallback(async () => {
+    const current = tournamentsRef.current.find(item => item.id === activeId);
+    if (!current) throw new Error('Torneo non trovato.');
+    const publicSlug = current.publicSlug || defaultTournamentSlug(current);
+    try {
+      const updatedMetadata = await dataProvider.update(current.id, {
+        name: current.name,
+        settings: current.settings,
+        notes: current.notes ?? '',
+        status: current.status ?? 'draft',
+        isPublic: true,
+        publicSlug,
+        scheduleNeedsRegeneration: current.scheduleNeedsRegeneration ?? false,
+        timerSoundEnabled: current.timerSoundEnabled ?? true,
+      }, current.version ?? 1);
+      const published = { ...current, ...updatedMetadata, settings: current.settings, players: current.players, matches: current.matches, isPublic: true, publicSlug };
+      if (dataProvider.kind === 'supabase') skipNextRemoteSaveRef.current = true;
+      setTournaments(items => {
+        const next = items.map(item => item.id === published.id ? published : item);
+        tournamentsRef.current = next;
+        return next;
+      });
+      return publicScheduleUrl(publicSlug, window.location.origin);
+    } catch (error) {
+      throw new Error(isAppError(error) ? error.message : 'Non è stato possibile pubblicare il calendario.');
+    }
+  }, [activeId]);
   const standings = useMemo(() => tournament ? getStandings(tournament) : [], [tournament]);
   const canLeaveForm = () => !formDirty || window.confirm('Hai modifiche non salvate. Vuoi davvero uscire?');
   const create = () => { if (!canLeaveForm()) return; const next = makeTournament(`Torneo ${tournaments.length + 1}`, user?.id); next.publicSlug = defaultTournamentSlug(next); setDraftTournament(next); setMutationError(null); setTab('settings'); };
@@ -168,7 +196,7 @@ function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: strin
     {tab === 'dashboard' && <Dashboard tournament={tournament!} exportPdf={() => exportTournamentPdf(tournament!)} onOpenDashboard={setDashboardMatchId} onEdit={edit} onDelete={() => setDeleteOpen(true)} />}
     {tab === 'players' && <Players tournament={tournament!} update={update} />}
     {tab === 'settings' && <SettingsView mode={draftTournament ? 'create' : 'edit'} tournament={shownTournament} busy={mutationBusy} mutationError={mutationError} onSubmit={saveTournament} onCancel={cancelForm} onDirtyChange={setFormDirty} />}
-    {tab === 'schedule' && <Schedule tournament={tournament!} update={update} onOpenDashboard={setDashboardMatchId} />}
+    {tab === 'schedule' && <Schedule tournament={tournament!} update={update} onOpenDashboard={setDashboardMatchId} onGeneratePublicLink={generatePublicScheduleLink} />}
     {tab === 'results' && <Results tournament={tournament!} standings={standings} update={update} onOpenDashboard={setDashboardMatchId} />}
     {tab === 'display' && <PublicDisplay tournament={tournament!} standings={standings} reloadTournament={reloadTournaments} storageKey={tournamentStore.storageKey} />}
   </main><DeleteTournamentDialog tournament={tournament!} open={deleteOpen} onClose={() => setDeleteOpen(false)} onDelete={deleteTournament} /></div>;
