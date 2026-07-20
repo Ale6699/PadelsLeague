@@ -158,7 +158,7 @@ function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: strin
       if (draftTournament) {
         await dataProvider.save([edited]); if (dataProvider.kind === 'supabase') { const fresh = await dataProvider.list(); edited = fresh.find(item => item.id === edited.id) ?? edited; skipNextRemoteSaveRef.current = true; } setTournaments(items => [...items, edited]); setActiveId(edited.id); setDraftTournament(null); setFormDirty(false); setTab('dashboard'); setToast('Torneo creato correttamente.');
       } else {
-        const changes = getTournamentChanges(original, values); const generationResult = choice === 'regenerate' ? generateSchedule({ ...edited, players: original.players, matches: original.matches }, true) : undefined;
+        const changes = getTournamentChanges(original, values); const generationResult = choice === 'regenerate' ? generateSchedule({ ...edited, players: original.players, matches: original.matches }, true, { randomize: true }) : undefined;
         if (generationResult?.status === 'impossible') throw { code: 'validation', message: generationResult.reason ?? 'Non è stato possibile generare un calendario uniforme.' };
         const needsRegeneration = choice === 'save' && changes.affectsSchedule && original.matches.length > 0;
         edited = { ...edited, scheduleNeedsRegeneration: needsRegeneration };

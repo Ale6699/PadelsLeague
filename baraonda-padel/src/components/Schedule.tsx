@@ -15,7 +15,7 @@ export function Schedule({ tournament, update, onOpenDashboard, onGeneratePublic
   const [sharing, setSharing] = useState(false);
   const [generationMessage, setGenerationMessage] = useState<{ kind: 'success' | 'error'; text: string }>();
   const regenerate = () => {
-    const result = generateSchedule(tournament, true);
+    const result = generateSchedule(tournament, true, { randomize: true });
     if (result.status === 'impossible') {
       const text = result.reason ?? 'Non è stato possibile generare un calendario uniforme.';
       setGenerationMessage({ kind: 'error', text });

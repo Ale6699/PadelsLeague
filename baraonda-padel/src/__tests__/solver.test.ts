@@ -4,8 +4,8 @@ import { buildSlots, generateSchedule, isAvailable, scheduleRespectsPlayerLimit 
 
 const player = (id: string, availability = [{ from: '09:00', to: '18:00' }]): Player => ({ id, firstName: id, lastName: '', level: 'Intermedio', gender: id.endsWith('d') ? 'Donna' : 'Uomo', notes: '', availability, avoidPartners: [], status: 'attivo' });
 const tournament = (players: Player[], changes = {}): Tournament => ({ id: 't', name: 'Test', players, matches: [], settings: { ...defaultSettings, date: '2026-07-15', start: '09:00', end: '14:00', playMinutes: 12, warmupMinutes: 3, pauses: [], targetMatchesPerPlayer: 8, prioritizeMixed: true, ...changes } });
-const generated = (value: Tournament, keepLocked = true) => {
-  const result = generateSchedule(value, keepLocked);
+const generated = (value: Tournament, keepLocked = true, options?: Parameters<typeof generateSchedule>[2]) => {
+  const result = generateSchedule(value, keepLocked, options);
   expect(result.status, result.reason).toBe('generated');
   return result.status === 'generated' ? result : { ...result, matches: [] as Match[] };
 };
@@ -20,6 +20,8 @@ const maxConsecutiveRun = (playerId: string, matches: Match[], slots: ReturnType
   for (let index = 1; index < indices.length; index += 1) { run = slots[indices[index - 1]].end === slots[indices[index]].start ? run + 1 : 1; maximum = Math.max(maximum, run); }
   return maximum;
 };
+const scheduleFingerprint = (matches: Match[]) => matches.map(match => `${match.start}:${match.players.join(',')}`).join(';');
+const partnerFingerprint = (matches: Match[]) => [...new Set(matches.flatMap(match => [[match.players[0], match.players[1]], [match.players[2], match.players[3]]].map(pair => [...pair].sort().join('|'))))].sort();
 
 describe('generatore baraonda', () => {
   it('non schiera un giocatore disponibile solo fino alle 13:00 oltre tale orario', () => {
@@ -121,7 +123,7 @@ describe('generatore baraonda', () => {
     const players = ['a', 'b', 'c', 'd', 'e'].map(id => player(id));
     const firstPass = generated(tournament(players)).matches;
     const locked = { ...firstPass[0], locked: true };
-    const result = generated({ ...tournament(players), matches: [locked] });
+    const result = generated({ ...tournament(players), matches: [locked] }, true, { randomize: true, seed: 17 });
     expect(result.matches.find(match => match.start === locked.start)).toEqual(locked);
     expect(new Set(countsFor(players, result.matches).values()).size).toBe(1);
   });
@@ -175,6 +177,46 @@ describe('generatore baraonda', () => {
   it('il calendario generato \u00e8 deterministico', () => {
     const build = () => generated(tournament(Array.from({ length: 19 }, (_, index) => player(`p${index}`)), { end: '18:00' })).matches.map(match => ({ start: match.start, players: match.players }));
     expect(build()).toEqual(build());
+  });
+
+  it('con lo stesso seme genera la stessa variante casuale', () => {
+    const players = Array.from({ length: 12 }, (_, index) => ({ ...player(`p${index}`), level: (['Principiante', 'Intermedio', 'Avanzato'] as const)[index % 3] }));
+    const value = tournament(players, { targetMatchesPerPlayer: 4 });
+    const first = generated(value, true, { randomize: true, seed: 42 });
+    const second = generated(value, true, { randomize: true, seed: 42 });
+    expect(scheduleFingerprint(first.matches)).toBe(scheduleFingerprint(second.matches));
+  });
+
+  it('con semi diversi varia coppie e avversari senza rompere i vincoli', () => {
+    const players = Array.from({ length: 12 }, (_, index) => ({ ...player(`p${index}`), level: (['Principiante', 'Intermedio', 'Avanzato'] as const)[index % 3] }));
+    const value = tournament(players, { targetMatchesPerPlayer: 4 });
+    const variants = [1, 2, 3, 4].map(seed => generated(value, true, { randomize: true, seed }));
+    expect(new Set(variants.map(result => scheduleFingerprint(result.matches))).size).toBeGreaterThan(1);
+    variants.forEach(result => {
+      expect([...countsFor(players, result.matches).values()]).toEqual(new Array(12).fill(result.commonMatchesPerPlayer));
+      expect(result.matches.every(match => match.players.every(id => { const selected = players.find(item => item.id === id)!; return isAvailable(selected, Number(match.start.slice(0, 2)) * 60 + Number(match.start.slice(3)), Number(match.end.slice(0, 2)) * 60 + Number(match.end.slice(3))); }))).toBe(true);
+    });
+  });
+
+  it('preferisce coppie nuove rispetto al calendario precedente', () => {
+    const players = Array.from({ length: 12 }, (_, index) => ({ ...player(`p${index}`), level: (['Principiante', 'Intermedio', 'Avanzato'] as const)[index % 3] }));
+    const value = tournament(players, { targetMatchesPerPlayer: 4 });
+    const previous = generated(value, true, { randomize: true, seed: 1 });
+    const withoutHistory = generated(value, true, { randomize: true, seed: 2 });
+    const withHistory = generated({ ...value, matches: previous.matches }, true, { randomize: true, seed: 2 });
+    const previousPairs = new Set(partnerFingerprint(previous.matches));
+    const overlap = (matches: Match[]) => partnerFingerprint(matches).filter(pair => previousPairs.has(pair)).length;
+    expect(overlap(withHistory.matches)).toBeLessThan(overlap(withoutHistory.matches));
+    expect(scheduleFingerprint(withHistory.matches)).not.toBe(scheduleFingerprint(previous.matches));
+  });
+
+  it('mantiene la soluzione unica anche con semi diversi', () => {
+    const [a, b, c, d] = ['a', 'b', 'c', 'd'].map(id => player(id));
+    a.avoidPartners = ['b', 'c']; d.avoidPartners = ['b', 'c'];
+    const value = tournament([a, b, c, d], { targetMatchesPerPlayer: 2 });
+    const first = generated(value, true, { randomize: true, seed: 1 });
+    const second = generated(value, true, { randomize: true, seed: 999 });
+    expect(partnerFingerprint(first.matches)).toEqual(partnerFingerprint(second.matches));
   });
 
   it('genera in meno di un secondo con 30 giocatori e circa 40 slot', () => {

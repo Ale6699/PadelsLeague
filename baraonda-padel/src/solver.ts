@@ -28,6 +28,25 @@ export type ScheduleGenerationResult = {
   reason?: string;
 };
 
+export type ScheduleGenerationOptions = { randomize?: boolean; seed?: number };
+
+const randomSeed = () => {
+  const values = new Uint32Array(1);
+  if (globalThis.crypto?.getRandomValues) return globalThis.crypto.getRandomValues(values)[0];
+  return Math.floor(Math.random() * 0x100000000);
+};
+
+const seededRandom = (seed: number) => {
+  let state = seed >>> 0;
+  return () => {
+    state += 0x6d2b79f5;
+    let value = state;
+    value = Math.imul(value ^ (value >>> 15), value | 1);
+    value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
+    return ((value ^ (value >>> 14)) >>> 0) / 0x100000000;
+  };
+};
+
 const isEligiblePlayer = (player: Player) => player.status === 'attivo' || player.status === 'ritardo';
 
 export function scheduleRespectsPlayerLimit(tournament: Tournament) {
@@ -49,7 +68,7 @@ export function scheduleRespectsPlayerLimit(tournament: Tournament) {
  * Availability and protected-match counts are hard constraints; pairing variety, balance,
  * mixed teams and rest are secondary quality criteria.
  */
-export function generateSchedule(tournament: Tournament, keepLocked = true): ScheduleGenerationResult {
+export function generateSchedule(tournament: Tournament, keepLocked = true, options: ScheduleGenerationOptions = {}): ScheduleGenerationResult {
   const slots = buildSlots(tournament.settings);
   const protectedMatches = keepLocked ? tournament.matches.filter(match => match.locked || isMatchCompleted(match)) : [];
   const protectedByTime = new Map(protectedMatches.map(match => [match.start, match]));
@@ -59,6 +78,8 @@ export function generateSchedule(tournament: Tournament, keepLocked = true): Sch
   const n = players.length;
   const indexOf = new Map(players.map((player, index) => [player.id, index]));
   const impossible = (reason: string): ScheduleGenerationResult => ({ status: 'impossible', matches: tournament.matches, requestedMax, commonMatchesPerPlayer: null, excludedPlayerIds, reason });
+  const randomize = Boolean(options.randomize);
+  const random = seededRandom(options.seed ?? (randomize ? randomSeed() : 0));
 
   if (!n) return impossible('Non ci sono giocatori attivi o in ritardo da inserire nel calendario.');
   const listNames = (items: Player[]) => items.map(fullName).join(', ');
@@ -116,6 +137,20 @@ export function generateSchedule(tournament: Tournament, keepLocked = true): Sch
   const mixedMat = players.map(a => players.map(b => teamMixed(a, b)));
   const avoidMat = players.map(a => players.map(b => a.avoidPartners.includes(b.id) || b.avoidPartners.includes(a.id)));
   const slotIndexByStart = new Map(slots.map((slot, slotIndex) => [slot.start, slotIndex]));
+  const protectedIds = new Set(protectedMatches.map(match => match.id));
+  const previousPairCounts = new Map<string, number>(); const previousGroupCounts = new Map<string, number>(); const previousTimedGroupCounts = new Map<string, number>();
+  tournament.matches.filter(match => !protectedIds.has(match.id)).forEach(match => {
+    [[match.players[0], match.players[1]], [match.players[2], match.players[3]]].forEach(([a, b]) => { const key = pairKey(a, b); previousPairCounts.set(key, (previousPairCounts.get(key) ?? 0) + 1); });
+    const group = [...match.players].sort().join('|'); previousGroupCounts.set(group, (previousGroupCounts.get(group) ?? 0) + 1); previousTimedGroupCounts.set(`${match.start}|${group}`, (previousTimedGroupCounts.get(`${match.start}|${group}`) ?? 0) + 1);
+  });
+  const balanceBand = (score: number) => score >= 90 ? 4 : score >= 75 ? 3 : score >= 60 ? 2 : score >= 40 ? 1 : 0;
+  const randomOrder = players.map(() => slots.map(() => random()));
+  const noveltyScore = (pairing: [number, number, number, number], start: string) => {
+    const ids = pairing.map(playerIndex => players[playerIndex].id);
+    const samePairs = (previousPairCounts.get(pairKey(ids[0], ids[1])) ?? 0) + (previousPairCounts.get(pairKey(ids[2], ids[3])) ?? 0);
+    const group = [...ids].sort().join('|');
+    return [samePairs, previousGroupCounts.get(group) ?? 0, previousTimedGroupCounts.get(`${start}|${group}`) ?? 0];
+  };
 
   const temporalScore = (generated: Match[]) => {
     const appearances: number[][] = Array.from({ length: n }, () => []);
@@ -147,7 +182,8 @@ export function generateSchedule(tournament: Tournament, keepLocked = true): Sch
   const improveTemporalSpread = (matches: Match[]) => {
     const working = matches.map(match => ({ ...match, players: [...match.players] as Match['players'], violations: [...match.violations] }));
     let currentScore = temporalScore(working);
-    for (let iteration = 0; iteration < 3; iteration += 1) {
+    const improvementIterations = n >= 24 ? 1 : 3;
+    for (let iteration = 0; iteration < improvementIterations; iteration += 1) {
       let bestScore = currentScore; let bestAction: { type: 'move'; matchIndex: number; slotIndex: number } | { type: 'swap'; firstMatch: number; firstPosition: number; secondMatch: number; secondPosition: number } | undefined;
       const occupied = new Set([...protectedMatches, ...working].map(match => match.start));
       for (let matchIndex = 0; matchIndex < working.length; matchIndex += 1) {
@@ -191,13 +227,27 @@ export function generateSchedule(tournament: Tournament, keepLocked = true): Sch
     return matches.map(match => {
       const group = match.players.map(id => indexOf.get(id));
       if (!group.every((value): value is number => value !== undefined)) return match;
-      let best: { pairing: [number, number, number, number]; score: number[] } | undefined;
+      type PairingCandidate = { pairing: [number, number, number, number]; score: number[]; avoid: number; repeated: number; balance: number; mixedPenalty: number; novelty: number[] };
+      const candidates: PairingCandidate[] = [];
       for (const [i, j, k, l] of [[0, 1, 2, 3], [0, 2, 1, 3], [0, 3, 1, 2]]) {
         const pairing: [number, number, number, number] = [group[i], group[j], group[k], group[l]];
         const [one, two, three, four] = pairing;
-        const score = [(avoidMat[one][two] ? 1 : 0) + (avoidMat[three][four] ? 1 : 0), partnerCounts[one][two] + partnerCounts[three][four], 100 - balanceScoreFromLevels(level[one], level[two], level[three], level[four], mixedMat[one][two] && mixedMat[three][four]), tournament.settings.prioritizeMixed ? Number(!mixedMat[one][two]) + Number(!mixedMat[three][four]) : 0];
-        if (!best || compareArrays(score, best.score) < 0) best = { pairing, score };
+        const avoid = Number(avoidMat[one][two]) + Number(avoidMat[three][four]); const repeated = partnerCounts[one][two] + partnerCounts[three][four];
+        const balance = balanceScoreFromLevels(level[one], level[two], level[three], level[four], mixedMat[one][two] && mixedMat[three][four]); const mixedPenalty = tournament.settings.prioritizeMixed ? Number(!mixedMat[one][two]) + Number(!mixedMat[three][four]) : 0;
+        candidates.push({ pairing, score: [avoid, repeated, 100 - balance, mixedPenalty], avoid, repeated, balance, mixedPenalty, novelty: noveltyScore(pairing, match.start) });
       }
+      let best: PairingCandidate;
+      if (randomize) {
+        let shortlist = candidates;
+        const minimumAvoid = Math.min(...shortlist.map(candidate => candidate.avoid)); shortlist = shortlist.filter(candidate => candidate.avoid === minimumAvoid);
+        const minimumRepeated = Math.min(...shortlist.map(candidate => candidate.repeated)); shortlist = shortlist.filter(candidate => candidate.repeated === minimumRepeated);
+        const bestBalance = Math.max(...shortlist.map(candidate => candidate.balance)); const bestBand = balanceBand(bestBalance);
+        shortlist = shortlist.filter(candidate => balanceBand(candidate.balance) === bestBand && candidate.balance >= bestBalance - 5);
+        const minimumMixedPenalty = Math.min(...shortlist.map(candidate => candidate.mixedPenalty)); shortlist = shortlist.filter(candidate => candidate.mixedPenalty === minimumMixedPenalty);
+        const bestNovelty = shortlist.reduce((current, candidate) => compareArrays(candidate.novelty, current) < 0 ? candidate.novelty : current, shortlist[0].novelty);
+        shortlist = shortlist.filter(candidate => compareArrays(candidate.novelty, bestNovelty) === 0);
+        best = shortlist[Math.floor(random() * shortlist.length)];
+      } else best = candidates.reduce((current, candidate) => compareArrays(candidate.score, current.score) < 0 ? candidate : current);
       const [one, two, three, four] = best!.pairing; partnerCounts[one][two] += 1; partnerCounts[two][one] += 1; partnerCounts[three][four] += 1; partnerCounts[four][three] += 1;
       const ids: Match['players'] = [players[one].id, players[two].id, players[three].id, players[four].id];
       const violations: string[] = [];
@@ -243,10 +293,12 @@ export function generateSchedule(tournament: Tournament, keepLocked = true): Sch
         return ((actual + 1) - expected) ** 2 - (actual - expected) ** 2;
       };
       const playedImmediatelyBefore = (playerIndex: number) => slotIndex > 0 && slots[slotIndex - 1].end === slots[slotIndex].start && playedSlots[playerIndex].has(slotIndex - 1);
-      available.sort((a, b) => Number(urgent[b]) - Number(urgent[a]) || Number(playedImmediatelyBefore(a)) - Number(playedImmediatelyBefore(b)) || progressDelta(a) - progressDelta(b) || (remaining[a][slotIndex + 1] - deficits[a]) - (remaining[b][slotIndex + 1] - deficits[b]) || (((a + slotIndex) % n) - ((b + slotIndex) % n)) || a - b);
+      available.sort((a, b) => Number(urgent[b]) - Number(urgent[a]) || Number(playedImmediatelyBefore(a)) - Number(playedImmediatelyBefore(b)) || progressDelta(a) - progressDelta(b) || (remaining[a][slotIndex + 1] - deficits[a]) - (remaining[b][slotIndex + 1] - deficits[b]) || (randomize ? randomOrder[a][slotIndex] - randomOrder[b][slotIndex] : ((a + slotIndex) % n) - ((b + slotIndex) % n)) || a - b);
       const pool = [...available.slice(0, Math.min(12, available.length)), ...available.slice(12).filter(playerIndex => urgent[playerIndex])];
 
-      let best: { pairing: [number, number, number, number]; avoid: number; priority: number[]; progress: number; quality: number } | undefined;
+      type Candidate = { pairing: [number, number, number, number]; avoid: number; priority: number[]; progress: number; quality: number; repeated: number; balance: number; mixedPenalty: number; genderPenalty: number; novelty: number[] };
+      const candidates: Candidate[] = [];
+      let best: Candidate | undefined;
       for (let a = 0; a < pool.length - 3; a += 1) for (let b = a + 1; b < pool.length - 2; b += 1) for (let c = b + 1; c < pool.length - 1; c += 1) for (let d = c + 1; d < pool.length; d += 1) {
         const group = [pool[a], pool[b], pool[c], pool[d]];
         if (group.filter(playerIndex => urgent[playerIndex]).length !== urgentTotal) continue;
@@ -274,13 +326,32 @@ export function generateSchedule(tournament: Tournament, keepLocked = true): Sch
           const womenB = (donna[three] ? 1 : 0) + (donna[four] ? 1 : 0);
           const twoWomenVsTwoMen = (womenA === 2 && womenB === 0) || (womenB === 2 && womenA === 0);
           const repeated = partnersMat[one][two] + partnersMat[three][four];
+          const mixedPenalty = tournament.settings.prioritizeMixed ? Number(!mixedMat[one][two]) + Number(!mixedMat[three][four]) : 0;
           let quality = rest + repeated * 230 + (100 - score) * 7 + (score < 60 ? 500 : 0) + (score < 40 ? 1500 : 0) + (twoWomenVsTwoMen ? 450 : 0);
-          if (tournament.settings.prioritizeMixed) quality += (!mixedMat[one][two] ? 25 : 0) + (!mixedMat[three][four] ? 25 : 0);
-          const priorityComparison = best ? compareArrays(priority, best.priority) : 0;
-          if (!best || priorityComparison < 0 || (priorityComparison === 0 && (avoid < best.avoid || (avoid === best.avoid && quality < best.quality)))) best = { pairing: [one, two, three, four], avoid, priority, progress, quality };
+          quality += mixedPenalty * 25;
+          const candidate: Candidate = { pairing: [one, two, three, four], avoid, priority, progress, quality, repeated, balance: score, mixedPenalty, genderPenalty: Number(twoWomenVsTwoMen), novelty: randomize ? noveltyScore([one, two, three, four], slots[slotIndex].start) : [] };
+          if (randomize) candidates.push(candidate);
+          else {
+            const priorityComparison = best ? compareArrays(candidate.priority, best.priority) : 0;
+            if (!best || priorityComparison < 0 || (priorityComparison === 0 && (candidate.avoid < best.avoid || (candidate.avoid === best.avoid && candidate.quality < best.quality)))) best = candidate;
+          }
         }
       }
 
+      if (randomize && candidates.length) {
+        let shortlist = candidates;
+        const bestPriority = shortlist.reduce((current, candidate) => compareArrays(candidate.priority, current) < 0 ? candidate.priority : current, shortlist[0].priority);
+        shortlist = shortlist.filter(candidate => compareArrays(candidate.priority, bestPriority) === 0);
+        const minimumAvoid = Math.min(...shortlist.map(candidate => candidate.avoid)); shortlist = shortlist.filter(candidate => candidate.avoid === minimumAvoid);
+        const minimumRepeated = Math.min(...shortlist.map(candidate => candidate.repeated)); shortlist = shortlist.filter(candidate => candidate.repeated === minimumRepeated);
+        const minimumGenderPenalty = Math.min(...shortlist.map(candidate => candidate.genderPenalty)); shortlist = shortlist.filter(candidate => candidate.genderPenalty === minimumGenderPenalty);
+        const bestBalance = Math.max(...shortlist.map(candidate => candidate.balance)); const bestBand = balanceBand(bestBalance);
+        shortlist = shortlist.filter(candidate => balanceBand(candidate.balance) === bestBand && candidate.balance >= bestBalance - 5);
+        const minimumMixedPenalty = Math.min(...shortlist.map(candidate => candidate.mixedPenalty)); shortlist = shortlist.filter(candidate => candidate.mixedPenalty === minimumMixedPenalty);
+        const bestNovelty = shortlist.reduce((current, candidate) => compareArrays(candidate.novelty, current) < 0 ? candidate.novelty : current, shortlist[0].novelty);
+        shortlist = shortlist.filter(candidate => compareArrays(candidate.novelty, bestNovelty) === 0);
+        best = shortlist[Math.floor(random() * shortlist.length)];
+      }
       if (!best) continue;
       const mustUseSlot = urgentTotal > 0 || seatsLeft > remainingOpenSlots[slotIndex + 1] * 4;
       if (!mustUseSlot && best.progress >= 0) continue;
