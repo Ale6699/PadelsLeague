@@ -6,7 +6,7 @@ import { MATCH_OUTCOME_LABELS, calculateMatchOutcome } from '../services/matchRe
 import { useMatchDashboard } from '../hooks/useMatchDashboard';
 import { TeamScorePanel } from './TeamScorePanel';
 
-type Props = { tournament: Tournament; match: Match; index: number; onClose: () => void; onPersist: (live: LiveMatchState, status: MatchStatus) => void; onFinish: (score: LiveMatchScore, live: LiveMatchState) => void; onReset: () => void };
+type Props = { tournament: Tournament; match: Match; index: number; onClose: () => void; onPersist: (live: LiveMatchState, status: MatchStatus) => void; onFinish: (score: LiveMatchScore, live: LiveMatchState) => void; onReset: (live: LiveMatchState) => void };
 const statusLabel: Record<MatchStatus, string> = { scheduled: 'Programmato', in_progress: 'Partita in corso', paused: 'In pausa', time_expired: 'Tempo scaduto', completed: 'Partita conclusa', cancelled: 'Annullata' };
 
 export function MatchDashboard({ tournament, match, index, onClose, onPersist, onFinish, onReset }: Props) {
@@ -36,7 +36,7 @@ export function MatchDashboard({ tournament, match, index, onClose, onPersist, o
     dashboard.finish();
     onFinish(dashboard.live.score, dashboard.live);
   };
-  const reset = () => { if (window.confirm('Vuoi azzerare completamente questa partita? Questa operazione cancellerà timer, punteggio e cronologia.')) { dashboard.resetMatch(); onReset(); } };
+  const reset = () => { if (window.confirm('Vuoi azzerare completamente questa partita? Questa operazione cancellerà timer, punteggio e cronologia.')) onReset(dashboard.resetMatch()); };
   const reopen = () => { if (window.confirm('Stai modificando una partita già conclusa. La classifica verrà ricalcolata.')) dashboard.setStatus('in_progress'); };
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {

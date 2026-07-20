@@ -1,4 +1,4 @@
-import { AdvantageTeam, LiveMatchScore, LiveMatchState, LiveScoreValidationResult, MatchTimerState, PadelPointValue, ScoreAction, uid } from '../models';
+import { AdvantageTeam, LiveMatchScore, LiveMatchState, LiveScoreValidationResult, Match, MatchTimerState, PadelPointValue, ScoreAction, uid } from '../models';
 
 export const DEFAULT_MAX_GAMES = 6;
 export const pointOrder: PadelPointValue[] = [0, 15, 30, 40];
@@ -10,6 +10,10 @@ export const getLiveStateUpdatedAt = (live: LiveMatchState) => Math.max(live.las
 export function createLiveMatchState(durationMinutes = 12): LiveMatchState {
   const now = Date.now(); const durationMilliseconds = Math.max(1, durationMinutes) * 60_000;
   return { timer: { status: 'idle', durationMilliseconds, remainingMilliseconds: durationMilliseconds, startedAt: null, endsAt: null, updatedAt: now }, score: { teamAPoints: 0, teamBPoints: 0, advantageTeam: null, teamAGames: 0, teamBGames: 0, lastUpdated: now }, history: [], redo: [], servingTeam: 'team_a', audioEnabled: true, lastUpdated: now };
+}
+
+export function resetMatchForReplay(match: Match, durationMinutes: number, liveState = createLiveMatchState(durationMinutes)): Match {
+  return { ...match, status: 'scheduled', result: { aGames: null, bGames: null }, liveState };
 }
 
 export function normalizeLiveMatchScore(value: unknown, maxGames = DEFAULT_MAX_GAMES): LiveMatchScore {

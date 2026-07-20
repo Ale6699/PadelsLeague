@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { AdvantageTeam, LiveMatchScore } from '../models';
-import { addScoreAction, awardPoint, createLiveMatchState, normalizeLiveMatchScore, redoScoreAction, restorePersistedTimer, undoScoreAction, validateLiveMatchScore } from '../services/liveMatch';
+import { AdvantageTeam, LiveMatchScore, Match } from '../models';
+import { addScoreAction, awardPoint, createLiveMatchState, normalizeLiveMatchScore, redoScoreAction, resetMatchForReplay, restorePersistedTimer, undoScoreAction, validateLiveMatchScore } from '../services/liveMatch';
 
 const score = (a: LiveMatchScore['teamAPoints'] = 0, b: LiveMatchScore['teamBPoints'] = 0, gamesA = 0, gamesB = 0, advantageTeam: AdvantageTeam = null, lastUpdated = 0): LiveMatchScore => ({ teamAPoints: a, teamBPoints: b, advantageTeam, teamAGames: gamesA, teamBGames: gamesB, lastUpdated });
 
@@ -73,5 +73,27 @@ describe('timer persistito', () => {
   it('usa endsAt per rilevare la scadenza senza valori negativi', () => {
     const restored = restorePersistedTimer({ status: 'running', durationMilliseconds: 60_000, remainingMilliseconds: 10_000, startedAt: 0, endsAt: 1_000, updatedAt: 0 }, 2_000);
     expect(restored.status).toBe('expired'); expect(restored.remainingMilliseconds).toBe(0);
+  });
+});
+
+describe('reset partita', () => {
+  it('azzera risultato, stato live, timer e cronologia per renderla nuovamente giocabile', () => {
+    const previousLive = createLiveMatchState(12);
+    previousLive.score = score(40, 30, 6, 4, null, previousLive.score.lastUpdated);
+    previousLive.timer = { ...previousLive.timer, status: 'completed', remainingMilliseconds: 10_000 };
+    previousLive.history = [{ id: 'action-1', timestamp: 1, type: 'point_team_a', previousScore: score(), nextScore: score(15), previousServingTeam: 'team_a', nextServingTeam: 'team_a' }];
+    previousLive.redo = [...previousLive.history];
+    const match: Match = { id: 'match-1', start: '10:00', end: '10:15', players: ['a', 'b', 'c', 'd'], locked: false, violations: [], status: 'completed', result: { aGames: 6, bGames: 4 }, liveState: previousLive };
+
+    const reset = resetMatchForReplay(match, 12);
+
+    expect(reset.status).toBe('scheduled');
+    expect(reset.result).toEqual({ aGames: null, bGames: null });
+    expect(reset.liveState?.score).toMatchObject({ teamAPoints: 0, teamBPoints: 0, advantageTeam: null, teamAGames: 0, teamBGames: 0 });
+    expect(reset.liveState?.timer).toMatchObject({ status: 'idle', durationMilliseconds: 720_000, remainingMilliseconds: 720_000, startedAt: null, endsAt: null });
+    expect(reset.liveState?.history).toEqual([]);
+    expect(reset.liveState?.redo).toEqual([]);
+    expect(match.status).toBe('completed');
+    expect(match.result).toEqual({ aGames: 6, bGames: 4 });
   });
 });

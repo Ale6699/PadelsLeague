@@ -11,6 +11,7 @@ import { MatchStatus, LiveMatchState, Tournament, makeTournament } from './model
 import { MatchDashboard } from './components/MatchDashboard';
 import { exportTournamentPdf } from './services/pdf';
 import { getStandings } from './services/standings';
+import { resetMatchForReplay } from './services/liveMatch';
 import { tournamentStore } from './storage';
 import { dataProvider, isLocalDemo } from './data/provider';
 import { isAppError } from './data/tournaments.repository';
@@ -157,7 +158,7 @@ function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: strin
   if (loading) return <main className="configuration-page"><h1>Connessione a Supabase…</h1><p>Caricamento dei tornei in corso.</p></main>;
   if (requestedTournamentId && !tournament) return <main className="empty-state"><section><h1>Accesso non disponibile</h1><p>Non hai i permessi per accedere a questo torneo.</p><button onClick={() => window.location.assign('/tournaments')}>Torna ai tornei</button></section></main>;
   if (!tournament && !draftTournament) return <main className="empty-state"><section><span className="empty-state-icon">🎾</span><h1>Benvenuto in Baraonda Padel</h1><p>Crea il tuo primo torneo per iniziare.</p><button className="auth-submit" onClick={create}>Crea il primo torneo</button><div className="empty-state-links"><button onClick={() => window.location.assign('/profile')}>Il tuo profilo</button><button onClick={logout}>Esci</button></div></section></main>;
-  if (dashboardMatch && tournament) return <MatchDashboard tournament={tournament} match={dashboardMatch} index={tournament.matches.findIndex(match => match.id === dashboardMatch.id)} onClose={() => setDashboardMatchId(undefined)} onPersist={persistDashboard} onFinish={(score, liveState) => update(t => ({ ...t, matches: t.matches.map(match => match.id === dashboardMatch.id ? { ...match, liveState, status: 'completed', result: { aGames: score.teamAGames, bGames: score.teamBGames } } : match) }))} onReset={() => update(t => ({ ...t, matches: t.matches.map(match => match.id === dashboardMatch.id ? { ...match, status: 'scheduled', result: { aGames: null, bGames: null } } : match) }))} />;
+  if (dashboardMatch && tournament) return <MatchDashboard tournament={tournament} match={dashboardMatch} index={tournament.matches.findIndex(match => match.id === dashboardMatch.id)} onClose={() => setDashboardMatchId(undefined)} onPersist={persistDashboard} onFinish={(score, liveState) => update(t => ({ ...t, matches: t.matches.map(match => match.id === dashboardMatch.id ? { ...match, liveState, status: 'completed', result: { aGames: score.teamAGames, bGames: score.teamBGames } } : match) }))} onReset={liveState => update(t => ({ ...t, matches: t.matches.map(match => match.id === dashboardMatch.id ? resetMatchForReplay(match, t.settings.playMinutes, liveState) : match) }))} />;
   const selectTournament = (id: string) => { if (!canLeaveForm()) return; setDraftTournament(null); setMutationError(null); setActiveId(id); setTab('dashboard'); window.history.replaceState({}, '', '/tournaments'); };
   const selectTab = (id: (typeof nav)[number][0]) => { if (id !== tab && !canLeaveForm()) return; if (id === 'settings') { setDraftTournament(null); setMutationError(null); } setTab(id); };
   const shownTournament = draftTournament ?? tournament!;

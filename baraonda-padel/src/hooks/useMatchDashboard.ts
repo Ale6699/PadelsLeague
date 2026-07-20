@@ -31,6 +31,6 @@ export function useMatchDashboard({ match, durationMinutes, maxGames, onPersist 
   const resetCurrentGame = useCallback(() => setLive(current => addScoreAction(current, 'reset_current_game', { ...current.score, teamAPoints: 0, teamBPoints: 0, advantageTeam: null, lastUpdated: Date.now() })), []);
   const undo = useCallback(() => setLive(undoScoreAction), []); const redo = useCallback(() => setLive(redoScoreAction), []);
   const finish = useCallback(() => { setStatus('completed'); setLive(current => { const updatedAt = Date.now(); return { ...current, timer: { ...current.timer, status: 'completed', remainingMilliseconds: getRemainingMilliseconds(current.timer), endsAt: null, updatedAt }, lastUpdated: updatedAt }; }); }, []);
-  const resetMatch = useCallback(() => { setStatus('scheduled'); setLive(createLiveMatchState(durationMinutes)); }, [durationMinutes]);
+  const resetMatch = useCallback(() => { const reset = createLiveMatchState(durationMinutes); setStatus('scheduled'); setLive(reset); return reset; }, [durationMinutes]);
   return { live, status, remainingMilliseconds, startTimer, pauseTimer, resetTimer, adjustTimer, point, undo, redo, setManualScore, resetCurrentGame, finish, resetMatch, setStatus, setLive };
 }
