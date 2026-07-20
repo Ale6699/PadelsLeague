@@ -5,7 +5,7 @@ export type TournamentChangeSet = { hasChanges: boolean; affectsSchedule: boolea
 
 export const TOURNAMENT_FIELD_LABELS: Record<string, string> = {
   name: 'Nome torneo', publicTitle: 'Titolo pubblico', date: 'Data', start: 'Ora di inizio', end: 'Ora di fine',
-  playMinutes: 'Durata partita', warmupMinutes: 'Cambio/riscaldamento', targetMatchesPerPlayer: 'Partite per giocatore',
+  playMinutes: 'Durata partita', warmupMinutes: 'Cambio/riscaldamento', targetMatchesPerPlayer: 'Massimo partite per giocatore',
   maxGamesPerMatch: 'Massimo game', prioritizeMixed: 'Preferenza coppie miste', gameScoringMode: 'Regole di punteggio',
   notes: 'Note pubbliche', status: 'Stato', isPublic: 'Visibilità pubblica', publicSlug: 'Link pubblico',
   timerSoundEnabled: 'Suono timer', pauses: 'Pause',

@@ -133,17 +133,19 @@ function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: strin
       if (draftTournament) {
         await dataProvider.save([edited]); if (dataProvider.kind === 'supabase') { const fresh = await dataProvider.list(); edited = fresh.find(item => item.id === edited.id) ?? edited; skipNextRemoteSaveRef.current = true; } setTournaments(items => [...items, edited]); setActiveId(edited.id); setDraftTournament(null); setFormDirty(false); setTab('dashboard'); setToast('Torneo creato correttamente.');
       } else {
-        const changes = getTournamentChanges(original, values); const needsRegeneration = choice === 'save' && changes.affectsSchedule && original.matches.length > 0;
+        const changes = getTournamentChanges(original, values); const generationResult = choice === 'regenerate' ? generateSchedule({ ...edited, players: original.players, matches: original.matches }, true) : undefined;
+        if (generationResult?.status === 'impossible') throw { code: 'validation', message: generationResult.reason ?? 'Non è stato possibile generare un calendario uniforme.' };
+        const needsRegeneration = choice === 'save' && changes.affectsSchedule && original.matches.length > 0;
         edited = { ...edited, scheduleNeedsRegeneration: needsRegeneration };
         const updatedMetadata = await dataProvider.update(edited.id, { name: edited.name, settings: edited.settings, notes: edited.notes ?? '', status: edited.status ?? 'draft', isPublic: edited.isPublic ?? false, publicSlug: edited.publicSlug ?? '', scheduleNeedsRegeneration: edited.scheduleNeedsRegeneration ?? false, timerSoundEnabled: edited.timerSoundEnabled ?? true }, original.version ?? 1);
         let merged = { ...edited, ...updatedMetadata, players: original.players, matches: original.matches };
-        if (choice === 'regenerate') {
-          const regenerated = generateSchedule(merged, true); const protectedMatches = original.matches.filter(match => match.locked || match.status === 'completed'); const protectedIds = new Set(protectedMatches.map(match => match.id)); const protectedStarts = new Set(protectedMatches.map(match => match.start));
-          merged = { ...merged, matches: [...protectedMatches, ...regenerated.filter(match => !protectedIds.has(match.id) && !protectedStarts.has(match.start))].sort((a, b) => a.start.localeCompare(b.start)), scheduleNeedsRegeneration: false };
+        if (choice === 'regenerate' && generationResult?.status === 'generated') {
+          merged = { ...merged, matches: generationResult.matches, scheduleNeedsRegeneration: false };
           await dataProvider.replaceSchedule(merged, updatedMetadata.version ?? (original.version ?? 1) + 1);
           const fresh = await dataProvider.list(); const reloaded = fresh.find(item => item.id === merged.id); if (reloaded) merged = reloaded;
         }
-        skipNextRemoteSaveRef.current = dataProvider.kind === 'supabase'; setTournaments(items => items.map(item => item.id === merged.id ? merged : item)); setFormDirty(false); setTab('dashboard'); setToast(choice === 'regenerate' ? 'Torneo salvato e calendario rigenerato.' : 'Modifiche salvate correttamente.'); window.history.replaceState({}, '', '/tournaments');
+        const saveMessage = generationResult?.status === 'generated' && generationResult.commonMatchesPerPlayer !== generationResult.requestedMax ? `Torneo salvato. Massimo configurato: ${generationResult.requestedMax}; assegnate: ${generationResult.commonMatchesPerPlayer} partite per giocatore.` : choice === 'regenerate' ? 'Torneo salvato e calendario rigenerato.' : 'Modifiche salvate correttamente.';
+        skipNextRemoteSaveRef.current = dataProvider.kind === 'supabase'; setTournaments(items => items.map(item => item.id === merged.id ? merged : item)); setFormDirty(false); setTab('dashboard'); setToast(saveMessage); window.history.replaceState({}, '', '/tournaments');
       }
     } catch (error) { setMutationError(isAppError(error) ? error.message : 'Non è stato possibile salvare le modifiche.'); }
     finally { setMutationBusy(false); }

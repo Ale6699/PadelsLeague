@@ -21,7 +21,7 @@ Ogni torneo deve avere:
 - durata effettiva della partita configurabile, default 12 minuti;
 - durata cambio/riscaldamento configurabile, default 3 minuti;
 - zero o più pause con intervallo inizio/fine;
-- numero obiettivo di partite per giocatore, default 8;
+- numero massimo di partite per giocatore, default 8;
 - più tornei salvabili e riapribili.
 
 ## Giocatori
@@ -45,7 +45,7 @@ Non servono riserve o partecipanti non confermati.
 - Le coppie cambiano a ogni turno.
 - Ogni giocatore ha un punteggio individuale.
 - Sono consentiti turni consecutivi, ma il generatore deve privilegiare il riposo.
-- Non lasciare slot vuoti quando esiste una combinazione valida di quattro giocatori.
+- Lasciare inutilizzati gli slot eccedenti quando serve a mantenere lo stesso numero di partite per tutti.
 
 ## Priorità del generatore
 
@@ -54,7 +54,7 @@ In ordine:
 1. privilegiare il riposo ed evitare, quando possibile, turni consecutivi;
 2. massimizzare la varietà dei compagni e ridurre al minimo le coppie ripetute;
 3. rispettare la disponibilità oraria;
-4. rendere obbligatorio, per quanto matematicamente possibile, lo stesso numero di partite per tutti;
+4. rendere obbligatorio lo stesso numero di partite per tutti, senza superare il massimo configurato;
 5. chi lascia prima deve ricevere lo stesso numero di partite, concentrate prima;
 6. bilanciare le squadre per livello;
 7. evitare assolutamente due forti contro due deboli;

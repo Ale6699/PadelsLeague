@@ -1,9 +1,12 @@
 import { Plus, Trash2 } from 'lucide-react';
 import { Gender, Level, Player, PlayerStatus, Tournament, uid } from '../models';
+import { scheduleRespectsPlayerLimit } from '../solver';
 
-export function Players({ tournament, update }: { tournament: Tournament; update: (fn: (t: Tournament) => Tournament) => void }) {
+export function Players({ tournament, update: persist }: { tournament: Tournament; update: (fn: (t: Tournament) => Tournament) => void }) {
+  const withScheduleCheck = (next: Tournament) => ({ ...next, scheduleNeedsRegeneration: Boolean(next.scheduleNeedsRegeneration) || (next.matches.length > 0 && !scheduleRespectsPlayerLimit(next)) });
+  const update = (change: (tournament: Tournament) => Tournament) => persist(current => withScheduleCheck(change(current)));
   const add = () => update(t => ({ ...t, players: [...t.players, { id: uid(), firstName: 'Nuovo', lastName: 'Giocatore', level: 'Intermedio', gender: 'Uomo', notes: '', availability: [{ from: t.settings.start, to: t.settings.end }], avoidPartners: [], status: 'attivo' }] }));
-  const patch = (id: string, changes: Partial<Player>) => update(t => ({ ...t, players: t.players.map(player => player.id === id ? { ...player, ...changes } : player) }));
+  const patch = (id: string, changes: Partial<Player>) => update(t => ({ ...t, players: t.players.map(player => player.id === id ? { ...player, ...changes } : player), scheduleNeedsRegeneration: Boolean(t.scheduleNeedsRegeneration) || (t.matches.length > 0 && ('status' in changes || 'availability' in changes)) }));
   return <><header><div><h1>Giocatori</h1><p>Disponibilità, livello, genere e incompatibilità di coppia.</p></div><button onClick={add}><Plus size={17} /> Aggiungi</button></header><div className="player-list">{tournament.players.map(player => <div className="player" key={player.id}>{/* Text fields are uncontrolled (defaultValue + onBlur) so typing never touches global
         state; value-based keys remount them when the underlying value really changes
         (e.g. a sync from another device), keeping the DOM from showing stale data. */}
