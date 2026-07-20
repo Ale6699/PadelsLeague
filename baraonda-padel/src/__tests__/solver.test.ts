@@ -14,6 +14,12 @@ const countsFor = (players: Player[], matches: Match[]) => {
   matches.forEach(match => match.players.forEach(id => { if (counts.has(id)) counts.set(id, (counts.get(id) ?? 0) + 1); }));
   return counts;
 };
+const maxConsecutiveRun = (playerId: string, matches: Match[], slots: ReturnType<typeof buildSlots>) => {
+  const indices = matches.filter(match => match.players.includes(playerId)).map(match => slots.findIndex(slot => slot.start === match.start)).sort((a, b) => a - b);
+  let run = indices.length ? 1 : 0; let maximum = run;
+  for (let index = 1; index < indices.length; index += 1) { run = slots[indices[index - 1]].end === slots[indices[index]].start ? run + 1 : 1; maximum = Math.max(maximum, run); }
+  return maximum;
+};
 
 describe('generatore baraonda', () => {
   it('non schiera un giocatore disponibile solo fino alle 13:00 oltre tale orario', () => {
@@ -64,6 +70,30 @@ describe('generatore baraonda', () => {
     expect(result.commonMatchesPerPlayer).toBe(8);
     expect(result.matches).toHaveLength(36);
     expect([...countsFor(players, result.matches).values()]).toEqual(new Array(18).fill(8));
+  });
+
+  it('distribuisce le presenze nell’intera disponibilità dello snapshot reale', () => {
+    const players = Array.from({ length: 17 }, (_, index) => player(`p${index}`, [{ from: '10:00', to: '19:00' }]));
+    players[0] = { ...players[0], firstName: 'Alessandro', lastName: 'Russo', availability: [{ from: '10:00', to: '17:00' }] };
+    players[5] = { ...players[5], firstName: 'Andrea', lastName: 'Anolli', availability: [{ from: '10:00', to: '12:30' }] };
+    players[12] = { ...players[12], firstName: 'Nikolas', lastName: 'Parisi', availability: [{ from: '10:00', to: '12:30' }] };
+    const value = tournament(players, { start: '10:00', end: '19:00', targetMatchesPerPlayer: 10 });
+    const result = generated(value); const slots = buildSlots(value.settings);
+    expect(result.commonMatchesPerPlayer).toBe(8);
+    expect(result.matches).toHaveLength(34);
+    expect([...countsFor(players, result.matches).values()]).toEqual(new Array(17).fill(8));
+    expect(result.matches.every(match => match.players.every(id => isAvailable(players.find(item => item.id === id)!, Number(match.start.slice(0, 2)) * 60 + Number(match.start.slice(3)), Number(match.end.slice(0, 2)) * 60 + Number(match.end.slice(3)))))).toBe(true);
+
+    const alessandroSlots = result.matches.filter(match => match.players.includes(players[0].id)).map(match => slots.findIndex(slot => slot.start === match.start)).sort((a, b) => a - b);
+    const availableAlessandroSlots = slots.map((slot, index) => isAvailable(players[0], Number(slot.start.slice(0, 2)) * 60 + Number(slot.start.slice(3)), Number(slot.end.slice(0, 2)) * 60 + Number(slot.end.slice(3))) ? index : -1).filter(index => index >= 0);
+    expect(maxConsecutiveRun(players[0].id, result.matches, slots)).toBe(1);
+    expect((alessandroSlots[alessandroSlots.length - 1] - alessandroSlots[0]) / (availableAlessandroSlots[availableAlessandroSlots.length - 1] - availableAlessandroSlots[0])).toBeGreaterThanOrEqual(0.75);
+    expect(maxConsecutiveRun(players[5].id, result.matches, slots)).toBeLessThanOrEqual(3);
+    expect(maxConsecutiveRun(players[12].id, result.matches, slots)).toBeLessThanOrEqual(3);
+
+    const usedStarts = new Set(result.matches.map(match => match.start));
+    const unusedIndices = slots.flatMap((slot, index) => usedStarts.has(slot.start) ? [] : [index]);
+    expect(unusedIndices.some(index => index < slots.length - unusedIndices.length)).toBe(true);
   });
 
   it('elenca in ordine di rosa tutti i giocatori senza fasce', () => {
@@ -143,7 +173,7 @@ describe('generatore baraonda', () => {
   });
 
   it('il calendario generato \u00e8 deterministico', () => {
-    const build = () => generated(tournament(Array.from({ length: 19 }, (_, index) => player(`p${index}`)), { end: '18:00' })).matches.map(match => match.players);
+    const build = () => generated(tournament(Array.from({ length: 19 }, (_, index) => player(`p${index}`)), { end: '18:00' })).matches.map(match => ({ start: match.start, players: match.players }));
     expect(build()).toEqual(build());
   });
 
