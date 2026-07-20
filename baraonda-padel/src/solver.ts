@@ -1,4 +1,4 @@
-import { Match, Player, Quality, Settings, Tournament, levelValue, pairKey, toMin, toTime, uid } from './models';
+import { Match, Player, Quality, Settings, Tournament, fullName, levelValue, pairKey, toMin, toTime, uid } from './models';
 import { balanceScoreFromLevels, calculateMatchBalance } from './services/matchBalance';
 import { isMatchCompleted } from './services/matchResults';
 
@@ -61,6 +61,21 @@ export function generateSchedule(tournament: Tournament, keepLocked = true): Sch
   const impossible = (reason: string): ScheduleGenerationResult => ({ status: 'impossible', matches: tournament.matches, requestedMax, commonMatchesPerPlayer: null, excludedPlayerIds, reason });
 
   if (!n) return impossible('Non ci sono giocatori attivi o in ritardo da inserire nel calendario.');
+  const listNames = (items: Player[]) => items.map(fullName).join(', ');
+  const withoutAvailability = players.filter(player => player.availability.length === 0);
+  if (withoutAvailability.length) {
+    const names = listNames(withoutAvailability);
+    return impossible(withoutAvailability.length === 1
+      ? `Impossibile generare il calendario: ${names} non ha fasce di disponibilità. Aggiungine almeno una nella sezione Giocatori.`
+      : `Impossibile generare il calendario: ${names} non hanno fasce di disponibilità. Aggiungine almeno una per ciascuno nella sezione Giocatori.`);
+  }
+  const withoutPlayableSlot = players.filter(player => !slots.some(slot => isAvailable(player, toMin(slot.start), toMin(slot.end))));
+  if (withoutPlayableSlot.length) {
+    const names = listNames(withoutPlayableSlot);
+    return impossible(withoutPlayableSlot.length === 1
+      ? `Impossibile generare il calendario: ${names} non ha una fascia di disponibilità che comprenda uno slot valido del torneo. Correggi gli orari nella sezione Giocatori.`
+      : `Impossibile generare il calendario: ${names} non hanno fasce di disponibilità che comprendano uno slot valido del torneo. Correggi gli orari nella sezione Giocatori.`);
+  }
 
   const protectedCounts = new Array<number>(n).fill(0);
   const protectedLastPlayed = new Array<number>(n).fill(-2);

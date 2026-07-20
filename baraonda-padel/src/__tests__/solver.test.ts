@@ -47,6 +47,39 @@ describe('generatore baraonda', () => {
     expect([...countsFor(players, result.matches).values()]).toEqual(new Array(19).fill(4));
   });
 
+  it('indica il giocatore attivo senza fasce e conserva il calendario', () => {
+    const players = Array.from({ length: 18 }, (_, index) => player(`p${index}`));
+    players[9] = { ...players[9], firstName: 'Daniele', lastName: 'Sacco', availability: [] };
+    const existing: Match = { id: 'existing', start: '10:00', end: '10:15', players: ['p0', 'p1', 'p2', 'p3'], locked: false, violations: [] };
+    const value = { ...tournament(players, { start: '10:00', end: '19:00', targetMatchesPerPlayer: 10 }), matches: [existing] };
+    const result = generateSchedule(value);
+    expect(result.status).toBe('impossible');
+    expect(result.reason).toBe('Impossibile generare il calendario: Daniele Sacco non ha fasce di disponibilità. Aggiungine almeno una nella sezione Giocatori.');
+    expect(result.matches).toEqual(value.matches);
+  });
+
+  it('con lo snapshot da 18 giocatori completo genera 36 partite e 8 presenze ciascuno', () => {
+    const players = Array.from({ length: 18 }, (_, index) => player(`p${index}`, [{ from: '10:00', to: '19:00' }]));
+    const result = generated(tournament(players, { start: '10:00', end: '19:00', targetMatchesPerPlayer: 10 }));
+    expect(result.commonMatchesPerPlayer).toBe(8);
+    expect(result.matches).toHaveLength(36);
+    expect([...countsFor(players, result.matches).values()]).toEqual(new Array(18).fill(8));
+  });
+
+  it('elenca in ordine di rosa tutti i giocatori senza fasce', () => {
+    const players = ['Ada', 'Bruno', 'Carla', 'Diego'].map(name => ({ ...player(name), firstName: name, availability: [] }));
+    const result = generateSchedule(tournament(players));
+    expect(result.status).toBe('impossible');
+    expect(result.reason).toBe('Impossibile generare il calendario: Ada, Bruno, Carla, Diego non hanno fasce di disponibilità. Aggiungine almeno una per ciascuno nella sezione Giocatori.');
+  });
+
+  it('distingue una fascia che non comprende alcuno slot valido', () => {
+    const outside = { ...player('outside', [{ from: '08:00', to: '09:00' }]), firstName: 'Fuori', lastName: 'Orario' };
+    const result = generateSchedule(tournament([outside, ...['a', 'b', 'c', 'd'].map(id => player(id))]));
+    expect(result.status).toBe('impossible');
+    expect(result.reason).toBe('Impossibile generare il calendario: Fuori Orario non ha una fascia di disponibilità che comprenda uno slot valido del torneo. Correggi gli orari nella sezione Giocatori.');
+  });
+
   it('raggiunge il massimo configurato quando la capacit\u00e0 \u00e8 sufficiente', () => {
     const players = Array.from({ length: 8 }, (_, index) => player(`p${index}`));
     const result = generated(tournament(players));
