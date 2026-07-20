@@ -10,6 +10,10 @@
 .timer-display span { color: #d1e9e2; }
 .timer-expired { color: #ffd5a6; animation: pulse 1s infinite; }
 .timer-display em { margin-top: 8px; padding: 7px 12px; border: 1px solid currentColor; border-radius: 8px; font-style: normal; font-weight: 800; }
+.coin-toss-prompt { display: grid; justify-items: center; gap: 12px; margin: 0 0 18px; }
+.coin-toss-prompt p { margin: 0; font-size: 20px; font-weight: 900; letter-spacing: .04em; }
+.coin-toss-prompt div { display: flex; gap: 12px; }
+.coin-toss-prompt button { min-height: 56px; padding: 0 28px; background: #ffc562; font-size: 17px; font-weight: 800; }
 .scoreboard { display: grid; grid-template-columns: 1fr 150px 1fr; gap: 18px; align-items: stretch; }
 .team-score { margin: 0; padding: 28px; border: 1px solid #ffffff2d; border-radius: 24px; background: #ffffff16; box-shadow: none; text-align: center; }
 .team-score h2 { margin: 7px 0; }

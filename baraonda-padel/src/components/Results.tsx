@@ -7,7 +7,7 @@ export function Results({ tournament, standings, update, onOpenDashboard }: { to
   const names = new Map(tournament.players.map(player => [player.id, fullName(player)]));
   const maxGames = tournament.settings.maxGamesPerMatch ?? 6;
   const setScore = (id: string, side: 'aGames' | 'bGames', raw: string) => { const score = scoreFromInput(raw); if (raw !== '' && score === null) return; update(t => ({ ...t, matches: t.matches.map(match => match.id === id ? { ...match, result: { aGames: side === 'aGames' ? score : match.result?.aGames ?? null, bGames: side === 'bGames' ? score : match.result?.bGames ?? null } } : match) })); };
-  const reset = (id: string, completed: boolean) => { if (!completed || window.confirm('Vuoi cancellare il risultato di questa partita?')) update(t => ({ ...t, matches: t.matches.map(match => match.id === id ? resetMatchForReplay(match, t.settings.playMinutes) : match) })); };
+  const reset = (id: string, completed: boolean) => { if (!completed || window.confirm('Vuoi cancellare il risultato di questa partita?')) update(t => ({ ...t, matches: t.matches.map(match => match.id === id ? resetMatchForReplay(match, t.settings.playMinutes, t.settings.warmupMinutes) : match) })); };
 
   return <>
     <header className="page-header"><div><h1>Risultati e classifica</h1><p>Inserisci i game: risultato e classifica si aggiornano automaticamente.</p></div></header>

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AdvantageTeam, LiveMatchScore, Match } from '../models';
-import { addScoreAction, awardPoint, createLiveMatchState, normalizeLiveMatchScore, redoScoreAction, resetMatchForReplay, restorePersistedTimer, undoScoreAction, validateLiveMatchScore } from '../services/liveMatch';
+import { addScoreAction, awardPoint, createLiveMatchState, normalizeLiveMatchScore, normalizeLiveMatchState, redoScoreAction, resetMatchForReplay, restorePersistedTimer, undoScoreAction, validateLiveMatchScore } from '../services/liveMatch';
 
 const score = (a: LiveMatchScore['teamAPoints'] = 0, b: LiveMatchScore['teamBPoints'] = 0, gamesA = 0, gamesB = 0, advantageTeam: AdvantageTeam = null, lastUpdated = 0): LiveMatchScore => ({ teamAPoints: a, teamBPoints: b, advantageTeam, teamAGames: gamesA, teamBGames: gamesB, lastUpdated });
 
@@ -85,7 +85,7 @@ describe('reset partita', () => {
     previousLive.redo = [...previousLive.history];
     const match: Match = { id: 'match-1', start: '10:00', end: '10:15', players: ['a', 'b', 'c', 'd'], locked: false, violations: [], status: 'completed', result: { aGames: 6, bGames: 4 }, liveState: previousLive };
 
-    const reset = resetMatchForReplay(match, 12);
+    const reset = resetMatchForReplay(match, 12, 3);
 
     expect(reset.status).toBe('scheduled');
     expect(reset.result).toEqual({ aGames: null, bGames: null });
@@ -95,5 +95,29 @@ describe('reset partita', () => {
     expect(reset.liveState?.redo).toEqual([]);
     expect(match.status).toBe('completed');
     expect(match.result).toEqual({ aGames: 6, bGames: 4 });
+  });
+});
+
+describe('fase riscaldamento e per la palla', () => {
+  it('crea lo stato live in fase di riscaldamento con il timer di riscaldamento già avviato e il timer di gioco fermo', () => {
+    const live = createLiveMatchState(12, 5);
+    expect(live.phase).toBe('warmup');
+    expect(live.warmupTimer).toMatchObject({ status: 'running', durationMilliseconds: 300_000, remainingMilliseconds: 300_000 });
+    expect(live.warmupTimer.startedAt).not.toBeNull();
+    expect(live.timer).toMatchObject({ status: 'idle', durationMilliseconds: 720_000 });
+  });
+
+  it('normalizza i vecchi salvataggi senza fase/timer di riscaldamento portandoli direttamente in gioco', () => {
+    const legacy = { timer: { status: 'running', durationMilliseconds: 720_000, remainingMilliseconds: 400_000, startedAt: 1, endsAt: 2, updatedAt: 3 }, score: score(15, 0, 1, 0), history: [], redo: [], servingTeam: 'team_a', audioEnabled: true, lastUpdated: 3 };
+    const normalized = normalizeLiveMatchState(legacy, 12);
+    expect(normalized.phase).toBe('playing');
+    expect(normalized.warmupTimer.status).toBe('completed');
+  });
+
+  it('preserva fase e timer di riscaldamento già presenti nello stato salvato', () => {
+    const saved = { ...createLiveMatchState(12, 3), phase: 'coin_toss' as const };
+    const normalized = normalizeLiveMatchState(saved, 12);
+    expect(normalized.phase).toBe('coin_toss');
+    expect(normalized.warmupTimer.status).toBe('running');
   });
 });

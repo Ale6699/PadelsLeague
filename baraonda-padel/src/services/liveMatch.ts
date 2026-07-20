@@ -1,4 +1,4 @@
-import { AdvantageTeam, LiveMatchScore, LiveMatchState, LiveScoreValidationResult, Match, MatchTimerState, PadelPointValue, ScoreAction, uid } from '../models';
+import { AdvantageTeam, LiveMatchScore, LiveMatchState, LiveScoreValidationResult, Match, MatchPhase, MatchTimerState, PadelPointValue, ScoreAction, uid } from '../models';
 
 export const DEFAULT_MAX_GAMES = 6;
 export const pointOrder: PadelPointValue[] = [0, 15, 30, 40];
@@ -7,12 +7,19 @@ export const formatRemainingTime = (milliseconds: number) => `${String(Math.floo
 export const getRemainingMilliseconds = (timer: MatchTimerState, now = Date.now()) => timer.status === 'running' && timer.endsAt ? Math.max(0, timer.endsAt - now) : Math.max(0, timer.remainingMilliseconds);
 export const getLiveStateUpdatedAt = (live: LiveMatchState) => Math.max(live.lastUpdated, live.score.lastUpdated, live.timer.updatedAt);
 
-export function createLiveMatchState(durationMinutes = 12): LiveMatchState {
+export function createLiveMatchState(durationMinutes = 12, warmupMinutes = 3): LiveMatchState {
   const now = Date.now(); const durationMilliseconds = Math.max(1, durationMinutes) * 60_000;
-  return { timer: { status: 'idle', durationMilliseconds, remainingMilliseconds: durationMilliseconds, startedAt: null, endsAt: null, updatedAt: now }, score: { teamAPoints: 0, teamBPoints: 0, advantageTeam: null, teamAGames: 0, teamBGames: 0, lastUpdated: now }, history: [], redo: [], servingTeam: 'team_a', audioEnabled: true, lastUpdated: now };
+  const warmupDurationMilliseconds = Math.max(1, warmupMinutes) * 60_000;
+  return {
+    timer: { status: 'idle', durationMilliseconds, remainingMilliseconds: durationMilliseconds, startedAt: null, endsAt: null, updatedAt: now },
+    warmupTimer: { status: 'running', durationMilliseconds: warmupDurationMilliseconds, remainingMilliseconds: warmupDurationMilliseconds, startedAt: now, endsAt: now + warmupDurationMilliseconds, updatedAt: now },
+    phase: 'warmup',
+    score: { teamAPoints: 0, teamBPoints: 0, advantageTeam: null, teamAGames: 0, teamBGames: 0, lastUpdated: now },
+    history: [], redo: [], servingTeam: 'team_a', audioEnabled: true, lastUpdated: now,
+  };
 }
 
-export function resetMatchForReplay(match: Match, durationMinutes: number, liveState = createLiveMatchState(durationMinutes)): Match {
+export function resetMatchForReplay(match: Match, durationMinutes: number, warmupMinutes: number, liveState = createLiveMatchState(durationMinutes, warmupMinutes)): Match {
   return { ...match, status: 'scheduled', result: { aGames: null, bGames: null }, liveState };
 }
 
@@ -48,10 +55,14 @@ export function normalizeLiveMatchState(value: unknown, durationMinutes = 12, ma
     previousServingTeam: action.previousServingTeam ?? 'team_a',
     nextServingTeam: action.nextServingTeam ?? action.previousServingTeam ?? 'team_a',
   });
+  const hasPhase = live.phase === 'warmup' || live.phase === 'coin_toss' || live.phase === 'playing';
+  const legacyWarmupTimer: MatchTimerState = { status: 'completed', durationMilliseconds: 0, remainingMilliseconds: 0, startedAt: null, endsAt: null, updatedAt: Date.now() };
   return {
     ...fallback,
     ...live,
     timer: live.timer ? { ...fallback.timer, ...live.timer } : fallback.timer,
+    warmupTimer: live.warmupTimer ? { ...fallback.warmupTimer, ...live.warmupTimer } : hasPhase ? fallback.warmupTimer : legacyWarmupTimer,
+    phase: hasPhase ? live.phase as MatchPhase : 'playing',
     score: normalizeLiveMatchScore(live.score, maxGames),
     history: Array.isArray(live.history) ? live.history.map(normalizeAction) : [],
     redo: Array.isArray(live.redo) ? live.redo.map(normalizeAction) : [],
