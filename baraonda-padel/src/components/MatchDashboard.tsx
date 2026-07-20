@@ -72,18 +72,20 @@ export function MatchDashboard({ tournament, match, index, onClose, onPersist, o
         <TeamScorePanel team="B" players={[names.get(match.players[2]) ?? '—', names.get(match.players[3]) ?? '—']} games={dashboard.live.score.teamBGames} points={dashboard.live.score.teamBPoints} hasAdvantage={dashboard.live.score.advantageTeam === 'team_b'} serving={dashboard.live.servingTeam === 'team_b'} disabled={completed} onPoint={() => award('team_b')} />
       </div>
       {feedback && <div className="point-feedback" role="status">{feedback}</div>}
-      <div className="dashboard-controls">
+      <div className="dashboard-primary-controls">
         <button disabled={completed} onClick={dashboard.live.timer.status === 'running' ? dashboard.pauseTimer : dashboard.startTimer}>{dashboard.live.timer.status === 'running' ? <Pause /> : <Play />}{dashboard.live.timer.status === 'paused' ? 'Riprendi' : dashboard.live.timer.status === 'running' ? 'Pausa' : 'Avvia'}</button>
+        <button className="secondary" disabled={!dashboard.live.history.length || completed} onClick={dashboard.undo}><Undo2 /> Annulla punto</button>
+        {completed ? <button onClick={reopen}>Modifica risultato</button> : <button className="finish-button" onClick={finish}>Termina partita</button>}
+      </div>
+      <details className="secondary-controls"><summary>Altri controlli</summary><div className="dashboard-controls">
         <button className="secondary" disabled={completed} onClick={dashboard.resetTimer}><TimerReset /> Azzera timer</button>
         <button className="secondary" disabled={completed} onClick={() => dashboard.adjustTimer(-30_000)}><Clock3 /> −30 s</button>
         <button className="secondary" disabled={completed} onClick={() => dashboard.adjustTimer(30_000)}><Clock3 /> +30 s</button>
-        <button className="secondary" disabled={!dashboard.live.history.length || completed} onClick={dashboard.undo}><Undo2 /> Annulla punto</button>
         <button className="secondary" disabled={!dashboard.live.redo.length || completed} onClick={dashboard.redo}><Redo2 /> Ripristina</button>
         <button className="secondary" disabled={completed} onClick={dashboard.resetCurrentGame}><RotateCcw /> Reset game</button>
         <button className="secondary" onClick={() => dashboard.setLive(current => ({ ...current, audioEnabled: !current.audioEnabled, lastUpdated: Date.now() }))}><Volume2 /> Suono {dashboard.live.audioEnabled ? 'attivo' : 'disattivo'}</button>
-        {completed ? <button onClick={reopen}>Modifica risultato</button> : <button className="finish-button" onClick={finish}>Termina partita</button>}
         <button className="danger" onClick={reset}>Reset partita</button>
-      </div>
+      </div></details>
       <details className="manual-editor">
         <summary>Correzione manuale e guida scorciatoie</summary>
         <p>A / L: punto coppia · Spazio: pausa/riprendi · Ctrl/Cmd+Z: annulla · Ctrl/Cmd+Shift+Z: ripristina · F: schermo intero.</p>

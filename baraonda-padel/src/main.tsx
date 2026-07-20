@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import { CalendarDays, Download, LogOut, Plus, SlidersHorizontal, Trophy, Tv, Upload, Users, Shuffle } from 'lucide-react';
+import { Download, LogOut, Plus, Upload } from 'lucide-react';
 import { Dashboard } from './components/Dashboard';
 import { Players } from './components/Players';
 import { PublicDisplay } from './components/PublicDisplay';
@@ -32,6 +32,7 @@ import { TournamentSaveChoice } from './components/tournaments/TournamentForm';
 import { applyTournamentFormValues, getTournamentChanges } from './domain/tournaments/tournamentChanges';
 import { defaultTournamentSlug } from './data/mappers/tournament.mapper';
 import { generateSchedule } from './solver';
+import { MobileNavigation, OrganizerTab, organizerNavigation } from './components/MobileNavigation';
 import { publicScheduleUrl } from './publicView';
 import './styles.css';
 import './balance.css';
@@ -41,16 +42,11 @@ import './match-dashboard.css';
 import './supabase.css';
 import './auth.css';
 
-const nav = [
-  ['dashboard', 'Panoramica', CalendarDays], ['players', 'Giocatori', Users], ['settings', 'Configurazione', SlidersHorizontal],
-  ['schedule', 'Calendario', Shuffle], ['results', 'Risultati', Trophy], ['display', 'Schermo pubblico', Tv],
-] as const;
-
 function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: string }) {
   const { user, signOut } = useAuth();
   const [tournaments, setTournaments] = useState<Tournament[]>(() => { if (!isLocalDemo) return []; const saved = tournamentStore.load(); return saved.length ? saved : [makeTournament('Torneo 2026')]; });
   const [loading, setLoading] = useState(Boolean(dataProvider)); const [syncError, setSyncError] = useState<string | null>(null); const [hydrated, setHydrated] = useState(false);
-  const [activeId, setActiveId] = useState(requestedTournamentId ?? tournaments[0]?.id ?? ''); const [tab, setTab] = useState<(typeof nav)[number][0]>(requestedTournamentId ? 'settings' : 'dashboard'); const importer = useRef<HTMLInputElement>(null);
+  const [activeId, setActiveId] = useState(requestedTournamentId ?? tournaments[0]?.id ?? ''); const [tab, setTab] = useState<OrganizerTab>(requestedTournamentId ? 'settings' : 'dashboard'); const importer = useRef<HTMLInputElement>(null);
   const [dashboardMatchId, setDashboardMatchId] = useState<string>();
   const [draftTournament, setDraftTournament] = useState<Tournament | null>(null); const [formDirty, setFormDirty] = useState(false); const [mutationBusy, setMutationBusy] = useState(false); const [mutationError, setMutationError] = useState<string | null>(null); const [deleteOpen, setDeleteOpen] = useState(false); const [toast, setToast] = useState('');
   const tournamentsRef = useRef(tournaments);
@@ -190,9 +186,9 @@ function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: strin
   if (!tournament && !draftTournament) return <main className="empty-state"><section><span className="empty-state-icon">🎾</span><h1>Benvenuto in Baraonda Padel</h1><p>Crea il tuo primo torneo per iniziare.</p><button className="auth-submit" onClick={create}>Crea il primo torneo</button><div className="empty-state-links"><button onClick={() => window.location.assign('/profile')}>Il tuo profilo</button><button onClick={logout}>Esci</button></div></section></main>;
   if (dashboardMatch && tournament) return <MatchDashboard tournament={tournament} match={dashboardMatch} index={tournament.matches.findIndex(match => match.id === dashboardMatch.id)} onClose={() => setDashboardMatchId(undefined)} onPersist={persistDashboard} onFinish={(score, liveState) => update(t => ({ ...t, matches: t.matches.map(match => match.id === dashboardMatch.id ? { ...match, liveState, status: 'completed', result: { aGames: score.teamAGames, bGames: score.teamBGames } } : match) }))} onReset={liveState => update(t => ({ ...t, matches: t.matches.map(match => match.id === dashboardMatch.id ? resetMatchForReplay(match, t.settings.playMinutes, liveState) : match) }))} />;
   const selectTournament = (id: string) => { if (!canLeaveForm()) return; setDraftTournament(null); setMutationError(null); setActiveId(id); setTab('dashboard'); window.history.replaceState({}, '', '/tournaments'); };
-  const selectTab = (id: (typeof nav)[number][0]) => { if (id !== tab && !canLeaveForm()) return; if (id === 'settings') { setDraftTournament(null); setMutationError(null); } setTab(id); };
+  const selectTab = (id: OrganizerTab) => { if (id !== tab && !canLeaveForm()) return; if (id === 'settings') { setDraftTournament(null); setMutationError(null); } setTab(id); };
   const shownTournament = draftTournament ?? tournament!;
-  return <div className="app"><aside><div className="brand">🎾 <span>Baraonda<br />Padel</span></div><select aria-label="Torneo attivo" value={activeId} onChange={event => selectTournament(event.target.value)} disabled={Boolean(draftTournament)}>{tournaments.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button className="new" onClick={create}><Plus size={16} /> Nuovo torneo</button>{nav.map(([id, label, Icon]) => <button className={tab === id ? 'active' : ''} onClick={() => selectTab(id)} disabled={Boolean(draftTournament) && id !== 'settings'} key={id}><Icon size={18} />{label}</button>)}<div className="sidebar-tools"><button onClick={exportJson}><Download size={16} /> Esporta JSON</button><button onClick={() => importer.current?.click()}><Upload size={16} /> Importa JSON</button><input ref={importer} hidden type="file" accept="application/json" onChange={e => importJson(e.target.files?.[0])} /></div>{user && <div className="user-menu"><strong>Organizzatore</strong><span>{user.email}</span><button onClick={() => window.location.assign('/profile')}>Il tuo profilo</button><button onClick={logout}><LogOut size={15} /> Esci</button></div>}</aside><main>{isLocalDemo && <section className="notice" role="status">Modalità demo locale. Configura Supabase in <code>.env.local</code> per sincronizzare i dispositivi.</section>}{syncError && <section className="notice" role="status">{syncError} <button className="small" onClick={reloadFromProvider}>Riprova</button></section>}{toast && <section className="success-notice" role="status">{toast}<button className="small secondary" onClick={() => setToast('')}>Chiudi</button></section>}
+  return <div className="app"><aside className="desktop-sidebar"><div className="brand">🎾 <span>Baraonda<br />Padel</span></div><select aria-label="Torneo attivo" value={activeId} onChange={event => selectTournament(event.target.value)} disabled={Boolean(draftTournament)}>{tournaments.map(item => <option key={item.id} value={item.id}>{item.name}</option>)}</select><button className="new" onClick={create}><Plus size={16} /> Nuovo torneo</button>{organizerNavigation.map(([id, label, Icon]) => <button className={tab === id ? 'active' : ''} aria-current={tab === id ? 'page' : undefined} onClick={() => selectTab(id)} disabled={Boolean(draftTournament) && id !== 'settings'} key={id}><Icon size={18} />{label}</button>)}<div className="sidebar-tools"><button onClick={exportJson}><Download size={16} /> Esporta JSON</button><button onClick={() => importer.current?.click()}><Upload size={16} /> Importa JSON</button><input ref={importer} hidden type="file" accept="application/json" onChange={e => importJson(e.target.files?.[0])} /></div>{user && <div className="user-menu"><strong>Organizzatore</strong><span>{user.email}</span><button onClick={() => window.location.assign('/profile')}>Il tuo profilo</button><button onClick={logout}><LogOut size={15} /> Esci</button></div>}</aside><MobileNavigation activeTab={tab} tournaments={tournaments} activeId={activeId} draftOpen={Boolean(draftTournament)} userEmail={user?.email} onSelectTournament={selectTournament} onSelectTab={selectTab} onCreate={create} onExport={exportJson} onImport={() => importer.current?.click()} onProfile={() => window.location.assign('/profile')} onLogout={logout} /><main className="app-main">{isLocalDemo && <section className="notice" role="status">Modalità demo locale. Configura Supabase in <code>.env.local</code> per sincronizzare i dispositivi.</section>}{syncError && <section className="notice" role="status">{syncError} <button className="small" onClick={reloadFromProvider}>Riprova</button></section>}{toast && <section className="success-notice" role="status">{toast}<button className="small secondary" onClick={() => setToast('')}>Chiudi</button></section>}
     {tab === 'dashboard' && <Dashboard tournament={tournament!} exportPdf={() => exportTournamentPdf(tournament!)} onOpenDashboard={setDashboardMatchId} onEdit={edit} onDelete={() => setDeleteOpen(true)} />}
     {tab === 'players' && <Players tournament={tournament!} update={update} />}
     {tab === 'settings' && <SettingsView mode={draftTournament ? 'create' : 'edit'} tournament={shownTournament} busy={mutationBusy} mutationError={mutationError} onSubmit={saveTournament} onCancel={cancelForm} onDirtyChange={setFormDirty} />}

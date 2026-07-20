@@ -1,8 +1,36 @@
-.share-backdrop { position: fixed; z-index: 20; inset: 0; background: #09251edd; display: grid; place-items: center; padding: 20px; } .share-dialog { width: min(850px, 100%); max-height: min(90vh, 900px); overflow: auto; background: #fff; color: #17302a; border-radius: 18px; padding: 24px; box-shadow: 0 18px 60px #0008; } .share-dialog header { margin-bottom: 16px; } .share-dialog h2 { margin-bottom: 4px; } .share-dialog header p { margin-bottom: 0; } .share-options { display: flex; flex-wrap: wrap; gap: 10px 18px; padding: 12px; background: #edf5f1; border-radius: 10px; } .share-options label { display: flex; align-items: center; gap: 6px; font-size: 14px; } .share-warnings { margin: 14px 0; padding: 10px 14px; border-left: 4px solid #e89822; background: #fff3df; color: #80500b; } .share-warnings p { margin: 4px 0; } .share-preview, .share-recipients { display: flex; flex-direction: column; gap: 6px; font-weight: 700; margin-top: 14px; } .share-preview textarea { min-height: 260px; font: 13px/1.45 ui-monospace, monospace; resize: vertical; } .share-actions { display: flex; flex-wrap: wrap; gap: 9px; margin-top: 18px; } .share-status { margin: 14px 0 0; color: #126044; font-weight: 700; } @media (max-width: 580px) { .share-dialog { padding: 17px; } .share-actions button { width: 100%; } }
-.public-link-panel { margin: 16px 0; padding: 14px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; border: 1px solid #b8dfcf; border-radius: 12px; background: #eefaf5; }
+.share-backdrop { position: fixed; z-index: 1100; inset: 0; display: grid; place-items: center; padding: 20px; background: #09251edd; }
+.share-dialog { width: min(850px, 100%); max-height: min(90dvh, 900px); display: flex; flex-direction: column; overflow: hidden; border-radius: 18px; background: #fff; color: #17302a; box-shadow: 0 18px 60px #0008; }
+.share-dialog > header { flex: 0 0 auto; display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin: 0; padding: 22px 24px 14px; border-bottom: 1px solid #e4ece9; }
+.share-dialog h2 { margin-bottom: 4px; }
+.share-dialog header p { margin-bottom: 0; color: #667c76; }
+.public-link-panel { margin: 16px 24px 0; padding: 14px; display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 12px; border: 1px solid #b8dfcf; border-radius: 12px; background: #eefaf5; }
 .public-link-panel h3, .public-link-panel p { margin: 0; }
 .public-link-panel p { margin-top: 3px; color: #557269; font-size: 14px; }
 .public-link-result { grid-column: 1 / -1; display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 8px; }
 .public-link-result input { min-width: 0; font: 13px/1.4 ui-monospace, monospace; }
 .public-link-result .button { display: inline-flex; align-items: center; justify-content: center; gap: 6px; text-decoration: none; }
-@media (max-width: 580px) { .public-link-panel { grid-template-columns: 1fr; } .public-link-panel > button { width: 100%; } .public-link-result { grid-template-columns: minmax(0, 1fr) auto; } .public-link-result .button { grid-column: 1 / -1; } }
+.share-body { overflow: auto; padding: 18px 24px; }
+.share-options { display: flex; flex-wrap: wrap; gap: 10px 18px; padding: 12px; border-radius: 10px; background: #edf5f1; }
+.share-options label { min-height: 36px; display: flex; align-items: center; gap: 6px; font-size: 14px; }
+.share-options input { width: 18px; height: 18px; }
+.share-warnings { margin: 14px 0; padding: 10px 14px; border-left: 4px solid #e89822; background: #fff3df; color: #80500b; }
+.share-warnings p { margin: 4px 0; }
+.share-preview, .share-recipients { display: flex; flex-direction: column; gap: 6px; margin-top: 14px; font-weight: 700; }
+.share-preview textarea { min-height: 260px; font: 13px/1.45 ui-monospace, monospace; resize: vertical; }
+.share-actions { flex: 0 0 auto; display: flex; flex-wrap: wrap; gap: 9px; margin: 0; padding: 14px 24px; border-top: 1px solid #e4ece9; background: #fff; }
+.share-status { margin: 14px 0 0; color: #126044; font-weight: 700; }
+
+@media (max-width: 767px) {
+  .share-backdrop { align-items: end; padding: 0; }
+  .share-dialog { width: 100%; max-height: 92dvh; border-radius: 24px 24px 0 0; }
+  .share-dialog > header { position: sticky; top: 0; padding: 18px 17px 12px; }
+  .public-link-panel { margin: 14px 17px 0; grid-template-columns: 1fr; }
+  .public-link-panel > button { width: 100%; }
+  .public-link-result { grid-template-columns: minmax(0, 1fr) auto; }
+  .public-link-result .button { grid-column: 1 / -1; }
+  .share-body { padding: 15px 17px; }
+  .share-options { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+  .share-preview textarea { min-height: 190px; font-size: 16px; }
+  .share-actions { display: grid; grid-template-columns: 1fr 1fr; padding: 12px 17px calc(12px + env(safe-area-inset-bottom)); }
+  .share-actions button:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
