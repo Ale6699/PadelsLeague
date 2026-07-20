@@ -50,6 +50,15 @@ export class SupabaseTournamentRepository implements TournamentRepository {
       ? await client.from('matches').delete().eq('tournament_id', tournament.id).not('id', 'in', `(${currentMatchIds.join(',')})`)
       : await client.from('matches').delete().eq('tournament_id', tournament.id);
     if (staleMatchesError) return fail(staleMatchesError);
+    // Same bug as matches above, for players: upsert never deletes a row, so a player
+    // removed locally stayed in the DB and came back on the next realtime reload. This
+    // must run after stale matches are deleted: matches.team_*_player_*_id references
+    // players(id) without ON DELETE CASCADE, so a lingering match row would block the delete.
+    const currentPlayerIds = tournament.players.map(player => player.id);
+    const { error: stalePlayersError } = currentPlayerIds.length
+      ? await client.from('players').delete().eq('tournament_id', tournament.id).not('id', 'in', `(${currentPlayerIds.join(',')})`)
+      : await client.from('players').delete().eq('tournament_id', tournament.id);
+    if (stalePlayersError) return fail(stalePlayersError);
     const mappedMatches = tournament.matches.map((match, index) => ({ match, payload: mapMatchDomainToInsert(match, tournament.id, index + 1, tournament.settings.date) }));
     const matchesWithoutLiveState = mappedMatches.filter(item => !item.match.liveState).map(item => item.payload);
     if (matchesWithoutLiveState.length) { const { error: matchesError } = await client.from('matches').upsert(matchesWithoutLiveState); if (matchesError) return fail(matchesError); }
