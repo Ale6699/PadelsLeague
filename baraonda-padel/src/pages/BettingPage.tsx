@@ -78,7 +78,8 @@ export function BettingPage({ slug }: { slug: string }) {
     return () => { disposed = true; };
   }, [slug]);
 
-  const { config, wallet, markets, myBets, leaderboard, loading, error, reload } = useBetting(tournament?.id);
+  const { config, wallet, markets, myBets, leaderboard, loading, error, reload } = useBetting(tournament?.id, false, isAuthenticated);
+  const returnTo = encodeURIComponent(`/public/${encodeURIComponent(slug)}/scommesse`);
 
   const join = useCallback(async () => {
     if (!tournament) return; setJoining(true); setActionError(null);
@@ -137,8 +138,8 @@ export function BettingPage({ slug }: { slug: string }) {
     {(error || actionError) && <section className="notice" role="alert">{actionError ?? error} <button className="small" onClick={() => { setActionError(null); void reload(); }}>Riprova</button></section>}
 
     {config.enabled && !isAuthenticated && <section className="betting-cta">
-      <p>Per scommettere devi accedere o registrarti.</p>
-      <div><a className="auth-submit" href="/login">Accedi</a><a className="auth-submit secondary" href="/register">Registrati</a></div>
+      <p>Per scommettere accedi o crea un account gratuito. Dopo l'accesso torni qui e ricevi i gettoni.</p>
+      <div><a className="auth-submit" href={`/login?redirect=${returnTo}`}>Accedi</a><a className="auth-submit secondary" href={`/register?redirect=${returnTo}`}>Registrati</a></div>
     </section>}
 
     {config.enabled && isAuthenticated && !wallet && <section className="betting-cta">

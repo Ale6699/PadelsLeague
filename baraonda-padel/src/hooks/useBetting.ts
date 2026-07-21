@@ -9,15 +9,19 @@ export type BettingState = {
 };
 
 // Carica lo stato scommesse di un torneo e lo aggiorna in realtime. `asOrganizer` include l'elenco
-// completo dei wallet (visibile solo all'owner via RLS) per il pannello di gestione.
-export function useBetting(tournamentId: string | undefined, asOrganizer = false) {
+// completo dei wallet (visibile solo all'owner via RLS) per il pannello di gestione. Le tabelle
+// mercati/wallet/puntate sono leggibili solo da utenti autenticati (RLS): se `authenticated` è false
+// si carica solo la config pubblica, così un visitatore anonimo vede la schermata di accesso.
+export function useBetting(tournamentId: string | undefined, asOrganizer = false, authenticated = true) {
   const [state, setState] = useState<BettingState>({ config: { enabled: false, initialBalance: 1000, overUnderEnabled: true }, wallet: null, markets: [], myBets: [], wallets: [], leaderboard: [], loading: Boolean(tournamentId), error: null });
 
   const reload = useCallback(async () => {
     if (!tournamentId) return;
     try {
-      const [config, wallet, markets, myBets, leaderboard, wallets] = await Promise.all([
-        bettingProvider.getConfig(tournamentId), bettingProvider.getWallet(tournamentId), bettingProvider.listMarkets(tournamentId),
+      const config = await bettingProvider.getConfig(tournamentId);
+      if (!authenticated) { setState({ config, wallet: null, markets: [], myBets: [], wallets: [], leaderboard: [], loading: false, error: null }); return; }
+      const [wallet, markets, myBets, leaderboard, wallets] = await Promise.all([
+        bettingProvider.getWallet(tournamentId), bettingProvider.listMarkets(tournamentId),
         bettingProvider.listMyBets(tournamentId), bettingProvider.listLeaderboard(tournamentId),
         asOrganizer ? bettingProvider.listWallets(tournamentId) : Promise.resolve([]),
       ]);
@@ -25,12 +29,12 @@ export function useBetting(tournamentId: string | undefined, asOrganizer = false
     } catch (error) {
       setState(current => ({ ...current, loading: false, error: isAppError(error) ? error.message : 'Non è stato possibile caricare le scommesse.' }));
     }
-  }, [tournamentId, asOrganizer]);
+  }, [tournamentId, asOrganizer, authenticated]);
 
   useEffect(() => { void reload(); }, [reload]);
 
   useEffect(() => {
-    if (!supabase || !tournamentId) return undefined;
+    if (!supabase || !tournamentId || !authenticated) return undefined;
     const channel = supabase.channel(`betting:${tournamentId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bet_markets', filter: `tournament_id=eq.${tournamentId}` }, () => { void reload(); })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'betting_wallets', filter: `tournament_id=eq.${tournamentId}` }, () => { void reload(); })
@@ -38,7 +42,7 @@ export function useBetting(tournamentId: string | undefined, asOrganizer = false
       .on('postgres_changes', { event: '*', schema: 'public', table: 'bets' }, () => { void reload(); })
       .subscribe();
     return () => { void supabase?.removeChannel(channel); };
-  }, [reload, tournamentId]);
+  }, [reload, tournamentId, authenticated]);
 
   return { ...state, reload };
 }
