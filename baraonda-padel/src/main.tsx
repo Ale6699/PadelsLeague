@@ -27,6 +27,8 @@ import { ConfirmEmailPage } from './pages/auth/ConfirmEmailPage';
 import { LegalPage } from './pages/auth/LegalPage';
 import { ProfilePage } from './pages/profile/ProfilePage';
 import { PublicTournamentPage } from './pages/PublicTournamentPage';
+import { BettingPage } from './pages/BettingPage';
+import { BettingAdmin } from './components/betting/BettingAdmin';
 import { DeleteTournamentDialog } from './components/tournaments/DeleteTournamentDialog';
 import { TournamentFormValues } from './domain/tournaments/tournamentValidation';
 import { TournamentSaveChoice } from './components/tournaments/TournamentForm';
@@ -42,6 +44,7 @@ import './results.css';
 import './match-dashboard.css';
 import './supabase.css';
 import './auth.css';
+import './betting.css';
 
 function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: string }) {
   const { user, signOut } = useAuth();
@@ -200,6 +203,7 @@ function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: strin
     {tab === 'settings' && <SettingsView mode={draftTournament ? 'create' : 'edit'} tournament={shownTournament} busy={mutationBusy} mutationError={mutationError} onSubmit={saveTournament} onCancel={cancelForm} onDirtyChange={setFormDirty} />}
     {tab === 'schedule' && <Schedule tournament={tournament!} update={update} onOpenDashboard={setDashboardMatchId} onGeneratePublicLink={generatePublicScheduleLink} />}
     {tab === 'results' && <Results tournament={tournament!} standings={standings} update={update} onOpenDashboard={setDashboardMatchId} />}
+    {tab === 'scommesse' && <BettingAdmin tournament={tournament!} />}
     {tab === 'display' && <PublicDisplay tournament={tournament!} standings={standings} reloadTournament={reloadTournaments} storageKey={tournamentStore.storageKey} />}
   </main><DeleteTournamentDialog tournament={tournament!} open={deleteOpen} onClose={() => setDeleteOpen(false)} onDelete={deleteTournament} /></div>;
 }
@@ -216,6 +220,8 @@ function AppRouter() {
   if (path === '/terms') return <LegalPage kind="terms" />;
   if (path === '/privacy') return <LegalPage kind="privacy" />;
   if (path === '/profile') return <ProtectedRoute><ProfilePage /></ProtectedRoute>;
+  const betMatch = path.match(/^\/public\/([^/]+)\/scommesse$/);
+  if (betMatch) return <BettingPage slug={decodeURIComponent(betMatch[1])} />;
   const publicMatch = path.match(/^\/public\/([^/]+)(?:\/(?:schedule|standings))?$/);
   if (publicMatch) return <PublicTournamentPage slug={decodeURIComponent(publicMatch[1])} />;
   const editMatch = path.match(/^\/tournaments\/([^/]+)\/edit$/);

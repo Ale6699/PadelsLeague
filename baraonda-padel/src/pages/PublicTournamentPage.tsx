@@ -11,16 +11,19 @@ const toPublicTournament = (row: any, playerRows: any[], matchRows: any[]): Tour
 
 export function PublicTournamentPage({ slug }: { slug: string }) {
   const [tournament, setTournament] = useState<Tournament | null>(null); const [loading, setLoading] = useState(true); const [error, setError] = useState<string | null>(null);
+  const [bettingEnabled, setBettingEnabled] = useState(false);
   const [view, setView] = useState<PublicView>(() => publicViewFromPath(window.location.pathname));
   const load = useCallback(async () => {
     if (!isSupabaseConfigured || !supabase) {
       const local = findPublicTournamentBySlug(tournamentStore.load(), slug);
       setTournament(local ?? null);
+      setBettingEnabled(Boolean(local?.bettingEnabled));
       setError(local ? null : 'Questo torneo non è disponibile.');
       setLoading(false);
       return Boolean(local);
     }
     const { data: row, error: tournamentError } = await supabase.from('public_tournaments').select('*').eq('public_slug', slug).maybeSingle();
+    setBettingEnabled(Boolean(row?.betting_enabled));
     if (tournamentError || !row) { setTournament(null); setError('Questo torneo non è disponibile.'); setLoading(false); return false; }
     const [{ data: players, error: playersError }, { data: matches, error: matchesError }] = await Promise.all([supabase.from('public_players').select('*').eq('tournament_id', row.id), supabase.from('public_matches').select('*').eq('tournament_id', row.id).order('sequence_number')]);
     if (playersError || matchesError) { setError('Non è stato possibile caricare lo schermo pubblico.'); setLoading(false); return false; }
@@ -40,5 +43,8 @@ export function PublicTournamentPage({ slug }: { slug: string }) {
   const changeView = (nextView: PublicView) => { window.history.replaceState({}, '', publicViewPath(slug, nextView)); setView(nextView); window.scrollTo({ top: 0, behavior: 'smooth' }); };
   if (loading) return <main className="auth-loading">Caricamento schermo torneo…</main>;
   if (!tournament) return <main className="auth-loading">{error ?? 'Torneo non trovato.'}</main>;
-  return <PublicDisplay tournament={tournament} standings={standings} reloadTournament={() => { void load(); return true; }} storageKey={tournamentStore.storageKey} view={view} onViewChange={changeView} />;
+  return <>
+    {bettingEnabled && <a className="betting-float-cta" href={`/public/${encodeURIComponent(slug)}/scommesse`}>🪙 Scommetti</a>}
+    <PublicDisplay tournament={tournament} standings={standings} reloadTournament={() => { void load(); return true; }} storageKey={tournamentStore.storageKey} view={view} onViewChange={changeView} />
+  </>;
 }

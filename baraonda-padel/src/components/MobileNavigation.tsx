@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   CalendarDays,
+  Coins,
   Download,
   LogOut,
   MoreHorizontal,
@@ -16,7 +17,7 @@ import {
 } from 'lucide-react';
 import { Tournament } from '../models';
 
-export type OrganizerTab = 'dashboard' | 'players' | 'settings' | 'schedule' | 'results' | 'display';
+export type OrganizerTab = 'dashboard' | 'players' | 'settings' | 'schedule' | 'results' | 'display' | 'scommesse';
 
 export const organizerNavigation = [
   ['dashboard', 'Panoramica', CalendarDays],
@@ -24,6 +25,7 @@ export const organizerNavigation = [
   ['settings', 'Configurazione', Settings],
   ['schedule', 'Calendario', Shuffle],
   ['results', 'Risultati', Trophy],
+  ['scommesse', 'Scommesse', Coins],
   ['display', 'Schermo pubblico', Tv],
 ] as const;
 
@@ -99,6 +101,7 @@ export function MobileNavigation(props: Props) {
         <header><div><h2 id="mobile-more-title">Altro</h2><p>Gestisci torneo, dati e account.</p></div><button ref={closeButton} type="button" className="icon secondary" aria-label="Chiudi menu" onClick={close}><X /></button></header>
         <div className="mobile-sheet-grid">
           <button type="button" className={props.activeTab === 'settings' ? 'active' : ''} onClick={() => selectTab('settings')}><Settings /><span><b>Configurazione</b><small>Regole, orari e pubblicazione</small></span></button>
+          <button type="button" className={props.activeTab === 'scommesse' ? 'active' : ''} disabled={props.draftOpen} onClick={() => selectTab('scommesse')}><Coins /><span><b>Scommesse</b><small>Quote, mercati e saldi</small></span></button>
           <button type="button" className={props.activeTab === 'display' ? 'active' : ''} disabled={props.draftOpen} onClick={() => selectTab('display')}><Tv /><span><b>Schermo pubblico</b><small>Anteprima live del torneo</small></span></button>
           <button type="button" onClick={() => { props.onCreate(); setOpen(false); }}><Plus /><span><b>Nuovo torneo</b><small>Crea una nuova baraonda</small></span></button>
           <button type="button" disabled={props.draftOpen} onClick={() => { props.onExport(); setOpen(false); }}><Download /><span><b>Esporta JSON</b><small>Scarica una copia dei dati</small></span></button>

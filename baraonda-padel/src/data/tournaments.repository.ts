@@ -78,7 +78,9 @@ export class SupabaseTournamentRepository implements TournamentRepository {
   async update(id: string, input: UpdateTournamentInput, expectedVersion: number) {
     const client = requireSupabase(); const { data: { user }, error: userError } = await client.auth.getUser(); if (userError || !user) return fail(userError ?? new Error('AUTH_REQUIRED'));
     const candidate = { id, ownerId: user.id, players: [], matches: [], ...input } as Tournament;
-    const payload = mapTournamentDomainToInsert(candidate); delete (payload as Partial<typeof payload>).id; delete (payload as Partial<typeof payload>).owner_id;
+    // La configurazione scommesse non passa mai da questo update generico (i chiamanti in
+    // main.tsx inviano liste di campi fisse che non la includono): si gestisce con set_betting_config.
+    const payload = mapTournamentDomainToInsert(candidate); delete (payload as Partial<typeof payload>).id; delete (payload as Partial<typeof payload>).owner_id; delete (payload as Record<string, unknown>).betting_enabled; delete (payload as Record<string, unknown>).betting_initial_balance; delete (payload as Record<string, unknown>).betting_over_under_enabled;
     const { data, error } = await client.from('tournaments').update(payload).eq('id', id).eq('owner_id', user.id).eq('version', expectedVersion).select('*').maybeSingle();
     if (error) return fail(error); if (!data) return fail({ status: 409, message: 'VERSION_CONFLICT' });
     const { error: deleteBreaksError } = await client.from('tournament_breaks').delete().eq('tournament_id', id); if (deleteBreaksError) return fail(deleteBreaksError);

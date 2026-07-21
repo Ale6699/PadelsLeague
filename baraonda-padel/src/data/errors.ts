@@ -3,6 +3,8 @@ export type AppError = { code: AppErrorCode; message: string; cause?: unknown };
 export function mapSupabaseError(error: unknown): AppError {
   const details = error as { code?: string; message?: string; status?: number }; const text = details?.message ?? '';
   if (text.includes('SUPABASE_CONFIGURATION_MISSING')) return { code: 'configuration_error', message: 'Supabase non è configurato.' };
+  if (text.includes('INSUFFICIENT_FUNDS')) return { code: 'validation_error', message: 'Gettoni insufficienti per questa puntata.', cause: error };
+  if (text.includes('MARKET_CLOSED')) return { code: 'validation_error', message: 'Il mercato non è aperto alle puntate.', cause: error };
   if (text.includes('VERSION_CONFLICT') || details?.status === 409) return { code: 'conflict', message: 'Il dato è stato modificato da un’altra schermata. Ricarica e riprova.', cause: error };
   if (details?.code === '23505' && text.includes('public_slug')) return { code: 'validation_error', message: 'Il link pubblico è già utilizzato da un altro torneo.', cause: error };
   if (text.includes('PERMISSION_DENIED') || details?.status === 401 || details?.status === 403) return { code: 'permission_denied', message: 'Non hai i permessi per questa operazione.', cause: error };

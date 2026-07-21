@@ -36,6 +36,7 @@ export type Tournament = {
   previousMatches?: Match[]; isPublic?: boolean; ownerId?: string; notes?: string;
   status?: TournamentStatus; publicSlug?: string; version?: number; updatedAt?: string;
   scheduleNeedsRegeneration?: boolean; timerSoundEnabled?: boolean;
+  bettingEnabled?: boolean; bettingInitialBalance?: number; bettingOverUnderEnabled?: boolean;
 };
 export type Standing = { id: string; name: string; points: number; played: number; wins: number; draws: number; losses: number; gf: number; ga: number; coinToss?: boolean };
 export type Quality = { min: number; max: number; consecutive: number; maxPartnerRepeats: number; averagePartnerRepeats: number; levelImbalance: number; violations: number; mixedPercent: number };
@@ -53,8 +54,9 @@ export const defaultSettings: Settings = {
   gameScoringMode: 'advantages', maxGamesPerMatch: 6,
 };
 
+export const DEFAULT_BETTING_BALANCE = 1000;
 export const makeTournament = (name = 'Nuovo torneo', ownerId?: string): Tournament => ({
   id: uid(), name, ownerId, status: 'draft', notes: '', isPublic: false, version: 1,
-  scheduleNeedsRegeneration: false, timerSoundEnabled: true,
+  scheduleNeedsRegeneration: false, timerSoundEnabled: true, bettingEnabled: false, bettingInitialBalance: DEFAULT_BETTING_BALANCE, bettingOverUnderEnabled: true,
   settings: { ...defaultSettings, pauses: [] }, players: [], matches: [],
 });
