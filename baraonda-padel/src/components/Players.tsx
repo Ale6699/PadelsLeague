@@ -1,7 +1,8 @@
 import { useState } from 'react';
-import { ChevronDown, Plus, Trash2 } from 'lucide-react';
+import { ChevronDown, FileDown, Plus, Trash2 } from 'lucide-react';
 import { Gender, Level, Player, PlayerStatus, Tournament, fullName, uid } from '../models';
 import { scheduleRespectsPlayerLimit } from '../solver';
+import { exportPlayersPdf } from '../services/pdf';
 
 export function Players({ tournament, update: persist }: { tournament: Tournament; update: (fn: (t: Tournament) => Tournament) => void }) {
   const [expandedPlayer, setExpandedPlayer] = useState<string>();
@@ -20,7 +21,7 @@ export function Players({ tournament, update: persist }: { tournament: Tournamen
   const togglePartner = (player: Player, partnerId: string) => patch(player.id, { avoidPartners: player.avoidPartners.includes(partnerId) ? player.avoidPartners.filter(id => id !== partnerId) : [...player.avoidPartners, partnerId] });
 
   return <>
-    <header className="page-header"><div><h1>Giocatori</h1><p>Disponibilità, livello, genere e incompatibilità di coppia.</p></div><button onClick={add}><Plus size={17} /> Aggiungi</button></header>
+    <header className="page-header"><div><h1>Giocatori</h1><p>Disponibilità, livello, genere e incompatibilità di coppia.</p></div><div className="actions">{tournament.players.length > 0 && <button className="secondary" onClick={() => exportPlayersPdf(tournament)}><FileDown size={17} /> Esporta PDF</button>}<button onClick={add}><Plus size={17} /> Aggiungi</button></div></header>
     {!tournament.players.length && <section className="empty-panel"><span aria-hidden="true">👥</span><h2>Nessun giocatore</h2><p>Aggiungi almeno quattro partecipanti per creare il calendario.</p><button onClick={add}><Plus size={17} /> Aggiungi il primo giocatore</button></section>}
     <div className="player-list">{tournament.players.map(player => {
       const expanded = expandedPlayer === player.id;
