@@ -23,7 +23,7 @@ export function Players({ tournament, update: persist }: { tournament: Tournamen
   return <>
     <header className="page-header"><div><h1>Giocatori</h1><p>Disponibilità, livello, genere e incompatibilità di coppia.</p></div><div className="actions">{tournament.players.length > 0 && <button className="secondary" onClick={() => exportPlayersPdf(tournament)}><FileDown size={17} /> Esporta PDF</button>}<button onClick={add}><Plus size={17} /> Aggiungi</button></div></header>
     {!tournament.players.length && <section className="empty-panel"><span aria-hidden="true">👥</span><h2>Nessun giocatore</h2><p>Aggiungi almeno quattro partecipanti per creare il calendario.</p><button onClick={add}><Plus size={17} /> Aggiungi il primo giocatore</button></section>}
-    <div className="player-list">{tournament.players.map(player => {
+    <div className="player-list">{[...tournament.players].sort((a, b) => fullName(a).localeCompare(fullName(b), 'it', { sensitivity: 'base' })).map(player => {
       const expanded = expandedPlayer === player.id;
       return <article className={`player${expanded ? ' is-expanded' : ''}`} key={player.id}>
         <button type="button" className="player-summary" aria-expanded={expanded} aria-controls={`player-${player.id}`} onClick={() => setExpandedPlayer(expanded ? undefined : player.id)}>
