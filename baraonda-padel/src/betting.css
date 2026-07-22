@@ -18,6 +18,7 @@
 .bet-card { border: 1px solid rgba(127,127,127,.24); border-radius: 14px; padding: 12px 14px; background: var(--surface, #fff); }
 .bet-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 10px; font-size: .95rem; }
 .bet-card-when { font-size: .78rem; opacity: .7; }
+.bet-final-score { float: right; color: #17693c; font-size: .82rem; font-variant-numeric: tabular-nums; opacity: 1; }
 .bet-card-teams { font-size: .9rem; text-align: right; }
 .bet-card-match { display: flex; flex-direction: column; gap: 6px; align-items: stretch; margin-bottom: 10px; }
 .bet-card-match .bet-card-teams { display: flex; flex-direction: column; gap: 2px; text-align: left; }

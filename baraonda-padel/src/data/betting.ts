@@ -2,7 +2,7 @@ import { isLocalDemo } from './provider';
 import { supabase, requireSupabase } from '../lib/supabase';
 import { mapSupabaseError } from './errors';
 import { tournamentStore } from '../storage';
-import { levelValue, uid } from '../models';
+import { Tournament, levelValue, uid } from '../models';
 import {
   DEFAULT_LIQUIDITY, MAX_ODDS, MAX_WINNER_ODDS, WINNER_LIQUIDITY, currentOdds, headToHeadProbability,
   matchOutcomeProbabilities, overUnderProbabilities, payout, probabilityToOdds, teamStrength,
@@ -109,7 +109,8 @@ const supabaseBetting: BettingProvider = {
 // ---------------- Local demo (mono-utente) ----------------
 // Simulazione in localStorage per la modalità demo: un solo scommettitore. Le stesse formule di
 // bettingOdds.ts calcolano le quote leggendo i livelli reali dal torneo salvato localmente.
-type LocalState = { config: BettingConfig; wallet: Wallet | null; markets: BetMarket[]; bets: Bet[] };
+export type LocalBettingState = { config: BettingConfig; wallet: Wallet | null; markets: BetMarket[]; bets: Bet[] };
+type LocalState = LocalBettingState;
 const LOCAL_KEY = 'baraonda-padel-betting';
 const LOCAL_USER = { id: 'local-user', name: 'Tu' };
 
@@ -123,6 +124,74 @@ const repriceMarket = (market: BetMarket): BetMarket => {
   const total = market.selections.reduce((sum, selection) => sum + selection.stakePool, 0);
   const maxOdds = market.kind === 'tournament_winner' ? MAX_WINNER_ODDS : MAX_ODDS;
   return { ...market, selections: market.selections.map(selection => ({ ...selection, odds: currentOdds(selection.prior, selection.stakePool, total, market.liquidity, undefined, maxOdds) })) };
+};
+
+/** Determina l'esito di un mercato partita dal punteggio definitivo. */
+export const matchMarketWinningCode = (market: Pick<BetMarket, 'kind' | 'line'>, teamAGames: number, teamBGames: number): string | null => {
+  if (market.kind === 'match_outcome') return teamAGames > teamBGames ? 'A' : teamBGames > teamAGames ? 'B' : 'draw';
+  if (market.kind === 'over_under_games') return teamAGames + teamBGames > (market.line ?? 0) ? 'over' : 'under';
+  return null;
+};
+
+/**
+ * Replica in locale la riconciliazione transazionale del database. Se un risultato cambia,
+ * rimuove solo il payout precedente e assegna quello nuovo; lo stake e la quota restano fissi.
+ */
+export const reconcileLocalMatchBetting = (state: LocalBettingState, tournament: Pick<Tournament, 'matches'>): LocalBettingState => {
+  let wallet = state.wallet;
+  let bets = state.bets;
+  let markets = state.markets;
+
+  tournament.matches.forEach(match => {
+    const mustVoid = match.status === 'cancelled' || match.status !== 'completed' && markets.some(market => market.matchId === match.id && market.status === 'settled');
+    if (mustVoid) {
+      const marketIds = new Set(markets.filter(market => market.matchId === match.id && market.status !== 'void').map(market => market.id));
+      bets = bets.map(bet => {
+        if (!marketIds.has(bet.marketId) || bet.status === 'void') return bet;
+        if (wallet) wallet = { ...wallet, balance: wallet.balance + (bet.status === 'won' ? bet.stake - bet.potentialPayout : bet.stake) };
+        return { ...bet, status: 'void' as const };
+      });
+      markets = markets.map(market => marketIds.has(market.id) ? { ...market, status: 'void' as const, selections: market.selections.map(selection => ({ ...selection, isWinner: null })) } : market);
+      return;
+    }
+
+    const teamAGames = match.result?.aGames ?? (match.status === 'completed' ? match.liveState?.score.teamAGames : undefined);
+    const teamBGames = match.result?.bGames ?? (match.status === 'completed' ? match.liveState?.score.teamBGames : undefined);
+    if (match.status !== 'completed' || teamAGames == null || teamBGames == null) return;
+
+    markets = markets.map(market => {
+      if (market.matchId !== match.id || market.status === 'void') return market;
+      const winningCode = matchMarketWinningCode(market, teamAGames, teamBGames);
+      if (!winningCode) return market;
+      const winner = market.selections.find(selection => selection.code === winningCode);
+      if (!winner) return market;
+      const currentWinner = market.selections.find(selection => selection.isWinner === true);
+      if (market.status === 'settled' && currentWinner?.id === winner.id) return market;
+
+      if (market.status === 'settled') {
+        bets = bets.map(bet => {
+          if (bet.marketId !== market.id || (bet.status !== 'won' && bet.status !== 'lost')) return bet;
+          if (bet.status === 'won' && wallet) wallet = { ...wallet, balance: wallet.balance - bet.potentialPayout };
+          return { ...bet, status: 'pending' as const };
+        });
+      }
+
+      bets = bets.map(bet => {
+        if (bet.marketId !== market.id || bet.status !== 'pending') return bet;
+        const won = bet.selectionId === winner.id;
+        if (won && wallet) wallet = { ...wallet, balance: wallet.balance + bet.potentialPayout };
+        return { ...bet, status: won ? 'won' as const : 'lost' as const };
+      });
+
+      return {
+        ...market,
+        status: 'settled' as const,
+        selections: market.selections.map(selection => ({ ...selection, isWinner: selection.id === winner.id })),
+      };
+    });
+  });
+
+  return { ...state, wallet, bets, markets };
 };
 
 type LocalTournament = ReturnType<typeof localTournament>;
@@ -160,7 +229,7 @@ const localSync = (tournamentId: string) => {
     if (market.status === 'settled' || market.status === 'void') return market;
     return { ...market, status: next && market.matchId === next.id ? 'open' : 'closed' };
   });
-  writeLocal(tournamentId, { ...state, markets });
+  writeLocal(tournamentId, reconcileLocalMatchBetting({ ...state, markets }, tournament));
 };
 
 const localBetting: BettingProvider = {
@@ -174,10 +243,10 @@ const localBetting: BettingProvider = {
     writeLocal(tournamentId, { ...state, config, wallet });
     return wallet;
   },
-  async getWallet(tournamentId) { return localState(tournamentId).wallet; },
+  async getWallet(tournamentId) { localSync(tournamentId); return localState(tournamentId).wallet; },
   async listMarkets(tournamentId) { localSync(tournamentId); return localState(tournamentId).markets; },
-  async listMyBets(tournamentId) { return localState(tournamentId).bets; },
-  async listLeaderboard(tournamentId) { const wallet = localState(tournamentId).wallet; return wallet ? [{ displayName: wallet.displayName, balance: wallet.balance }] : []; },
+  async listMyBets(tournamentId) { localSync(tournamentId); return localState(tournamentId).bets; },
+  async listLeaderboard(tournamentId) { localSync(tournamentId); const wallet = localState(tournamentId).wallet; return wallet ? [{ displayName: wallet.displayName, balance: wallet.balance }] : []; },
   async placeBet(marketId, selectionId, stake) {
     const tournamentId = loadLocal() && Object.keys(loadLocal()).find(id => localState(id).markets.some(market => market.id === marketId));
     if (!tournamentId) throw mapSupabaseError(new Error('MATCH_NOT_FOUND'));
@@ -192,7 +261,13 @@ const localBetting: BettingProvider = {
     const markets = state.markets.map(item => item.id !== marketId ? item : repriceMarket({ ...item, selections: item.selections.map(current => current.id === selectionId ? { ...current, stakePool: current.stakePool + stake } : current) }));
     writeLocal(tournamentId, { ...state, wallet: { ...state.wallet, balance: state.wallet.balance - stake }, bets: [bet, ...state.bets], markets });
   },
-  async setConfig(tournamentId, enabled, initialBalance, overUnderEnabled) { const state = localState(tournamentId); writeLocal(tournamentId, { ...state, config: { enabled, initialBalance, overUnderEnabled } }); },
+  async setConfig(tournamentId, enabled, initialBalance, overUnderEnabled) {
+    const state = localState(tournamentId); const config = { enabled, initialBalance, overUnderEnabled };
+    writeLocal(tournamentId, { ...state, config });
+    const tournaments = tournamentStore.load();
+    tournamentStore.save(tournaments.map(tournament => tournament.id === tournamentId ? { ...tournament, bettingEnabled: enabled, bettingInitialBalance: initialBalance, bettingOverUnderEnabled: overUnderEnabled } : tournament));
+    localSync(tournamentId);
+  },
   async generateMatchMarkets(matchId, tournamentId) {
     const tournament = localTournament(tournamentId); const match = tournament?.matches.find(item => item.id === matchId); if (!tournament || !match) return;
     const state = localState(tournamentId); if (state.markets.some(market => market.matchId === matchId)) return;

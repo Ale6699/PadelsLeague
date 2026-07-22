@@ -9,7 +9,7 @@ import { BetMarket, BetSelection, bettingProvider } from '../data/betting';
 import { useAuth } from '../auth/useAuth';
 import { useBetting } from '../hooks/useBetting';
 
-type MatchInfo = { id: string; index: number; start: string; teamA: string; teamB: string };
+type MatchInfo = { id: string; index: number; start: string; teamA: string; teamB: string; status: string; teamAGames: number | null; teamBGames: number | null };
 type Pending = { market: BetMarket; selection: BetSelection };
 type Tab = 'markets' | 'leaderboard' | 'mybets';
 
@@ -54,7 +54,7 @@ export function BettingPage({ slug }: { slug: string }) {
             const nameMap = new Map(local.players.map(player => [player.id, `${player.firstName} ${player.lastName}`.trim()]));
             const name = (id: string) => nameMap.get(id) || '?';
             setPlayers(nameMap);
-            setMatches(local.matches.map((match, index) => ({ id: match.id, index, start: match.start, teamA: `${name(match.players[0])} / ${name(match.players[1])}`, teamB: `${name(match.players[2])} / ${name(match.players[3])}` })));
+            setMatches(local.matches.map((match, index) => ({ id: match.id, index, start: match.start, teamA: `${name(match.players[0])} / ${name(match.players[1])}`, teamB: `${name(match.players[2])} / ${name(match.players[3])}`, status: match.status ?? 'scheduled', teamAGames: match.result?.aGames ?? null, teamBGames: match.result?.bGames ?? null })));
           }
           setResolving(false);
         }
@@ -66,17 +66,31 @@ export function BettingPage({ slug }: { slug: string }) {
       setTournament({ id: row.id, name: row.name });
       const [{ data: playerRows }, { data: matchRows }] = await Promise.all([
         supabase.from('public_players').select('id, first_name, last_name').eq('tournament_id', row.id),
-        supabase.from('public_matches').select('id, sequence_number, starts_at, team_a_player_1_id, team_a_player_2_id, team_b_player_1_id, team_b_player_2_id').eq('tournament_id', row.id).order('sequence_number'),
+        supabase.from('public_matches').select('id, sequence_number, starts_at, team_a_player_1_id, team_a_player_2_id, team_b_player_1_id, team_b_player_2_id, team_a_games, team_b_games, status').eq('tournament_id', row.id).order('sequence_number'),
       ]);
       if (disposed) return;
       const nameMap = new Map((playerRows ?? []).map(player => [player.id, `${player.first_name} ${player.last_name}`.trim()]));
       const name = (id: string | null) => (id && nameMap.get(id)) || '?';
       setPlayers(nameMap);
-      setMatches((matchRows ?? []).map((match, index) => ({ id: match.id, index, start: new Date(match.starts_at).toISOString().slice(11, 16), teamA: `${name(match.team_a_player_1_id)} / ${name(match.team_a_player_2_id)}`, teamB: `${name(match.team_b_player_1_id)} / ${name(match.team_b_player_2_id)}` })));
+      setMatches((matchRows ?? []).map((match, index) => ({ id: match.id, index, start: new Date(match.starts_at).toISOString().slice(11, 16), teamA: `${name(match.team_a_player_1_id)} / ${name(match.team_a_player_2_id)}`, teamB: `${name(match.team_b_player_1_id)} / ${name(match.team_b_player_2_id)}`, status: match.status, teamAGames: match.team_a_games, teamBGames: match.team_b_games })));
       setResolving(false);
     })();
     return () => { disposed = true; };
   }, [slug]);
+
+  useEffect(() => {
+    if (!supabase || !tournament?.id) return undefined;
+    const client = supabase;
+    const reloadMatches = async () => {
+      const { data } = await client.from('public_matches').select('id, sequence_number, starts_at, team_a_player_1_id, team_a_player_2_id, team_b_player_1_id, team_b_player_2_id, team_a_games, team_b_games, status').eq('tournament_id', tournament.id).order('sequence_number');
+      const name = (id: string | null) => (id && players.get(id)) || '?';
+      setMatches((data ?? []).map((match, index) => ({ id: match.id, index, start: new Date(match.starts_at).toISOString().slice(11, 16), teamA: `${name(match.team_a_player_1_id)} / ${name(match.team_a_player_2_id)}`, teamB: `${name(match.team_b_player_1_id)} / ${name(match.team_b_player_2_id)}`, status: match.status, teamAGames: match.team_a_games, teamBGames: match.team_b_games })));
+    };
+    const channel = client.channel(`betting-matches:${tournament.id}`)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'matches', filter: `tournament_id=eq.${tournament.id}` }, () => { void reloadMatches(); })
+      .subscribe();
+    return () => { void client.removeChannel(channel); };
+  }, [players, tournament?.id]);
 
   const { config, wallet, markets, myBets, leaderboard, loading, error, reload } = useBetting(tournament?.id, false, isAuthenticated);
   const returnTo = encodeURIComponent(`/public/${encodeURIComponent(slug)}/scommesse`);
@@ -158,9 +172,9 @@ export function BettingPage({ slug }: { slug: string }) {
         {loading && <p>Caricamento mercati…</p>}
         {!loading && !markets.length && <p className="empty">Nessun mercato disponibile. L'organizzatore deve ancora aprirli.</p>}
         {grouped.winner.map(market => <article key={market.id} className="bet-card"><header className="bet-card-head"><Trophy size={16} /> <b>Vincitore torneo</b></header><SelectionRow market={market} canBet={canBet} activeId={pending?.market.id === market.id ? pending?.selection.id : undefined} onSelect={selectSelection(market)} /></article>)}
-        {grouped.matchCards.map(([matchId, matchMarkets]) => { const info = matchOf.get(matchId); return <article key={matchId} className="bet-card">
+        {grouped.matchCards.map(([matchId, matchMarkets]) => { const info = matchOf.get(matchId); const hasFinalScore = info?.status === 'completed' && info.teamAGames !== null && info.teamBGames !== null; return <article key={matchId} className="bet-card">
           <header className="bet-card-match">
-            <span className="bet-card-when">{info ? `Partita ${info.index + 1} · ore ${info.start}` : 'Partita'}</span>
+            <span className="bet-card-when">{info ? `Partita ${info.index + 1} · ore ${info.start}` : 'Partita'}{hasFinalScore && <strong className="bet-final-score">Finale {info.teamAGames}–{info.teamBGames}</strong>}</span>
             {info && <div className="bet-card-teams"><span><em>A</em> {info.teamA}</span><span className="vs">vs</span><span><em>B</em> {info.teamB}</span></div>}
           </header>
           {matchMarkets.map(market => <SelectionRow key={market.id} market={market} canBet={canBet} activeId={pending?.market.id === market.id ? pending?.selection.id : undefined} onSelect={selectSelection(market)} />)}

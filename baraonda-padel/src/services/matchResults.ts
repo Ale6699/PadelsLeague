@@ -27,3 +27,18 @@ export function isMatchCompleted(match: Match) { return ['team_a', 'team_b', 'dr
 /** Prima partita non ancora conclusa in ordine cronologico: unica apribile dal cruscotto. */
 export function getNextPlayableMatch(matches: Match[]): Match | undefined { return matches.find(match => !isMatchCompleted(match)); }
 export function scoreFromInput(value: string): number | null { if (value === '') return null; const parsed = Number(value); return validateMatchScore(parsed) ? parsed : null; }
+
+/** Mantiene allineati risultato finale e live state, che è la sorgente persistita per le partite concluse. */
+export function withMatchResultScore(match: Match, aGames: number | null, bGames: number | null, updatedAt = Date.now()): Match {
+  const result = { aGames, bGames };
+  if (match.status !== 'completed' || !match.liveState || aGames === null || bGames === null) return { ...match, result };
+  return {
+    ...match,
+    result,
+    liveState: {
+      ...match.liveState,
+      lastUpdated: updatedAt,
+      score: { ...match.liveState.score, teamAGames: aGames, teamBGames: bGames, lastUpdated: updatedAt },
+    },
+  };
+}

@@ -1,12 +1,12 @@
 import { RotateCcw } from 'lucide-react';
 import { Standing, Tournament, fullName } from '../models';
 import { resetMatchForReplay } from '../services/liveMatch';
-import { MATCH_OUTCOME_LABELS, getMatchOutcome, isMatchCompleted, scoreFromInput } from '../services/matchResults';
+import { MATCH_OUTCOME_LABELS, getMatchOutcome, isMatchCompleted, scoreFromInput, withMatchResultScore } from '../services/matchResults';
 
 export function Results({ tournament, standings, update }: { tournament: Tournament; standings: Standing[]; update: (fn: (t: Tournament) => Tournament) => void }) {
   const names = new Map(tournament.players.map(player => [player.id, fullName(player)]));
   const maxGames = tournament.settings.maxGamesPerMatch ?? 6;
-  const setScore = (id: string, side: 'aGames' | 'bGames', raw: string) => { const score = scoreFromInput(raw); if (raw !== '' && score === null) return; update(t => ({ ...t, matches: t.matches.map(match => match.id === id ? { ...match, result: { aGames: side === 'aGames' ? score : match.result?.aGames ?? null, bGames: side === 'bGames' ? score : match.result?.bGames ?? null } } : match) })); };
+  const setScore = (id: string, side: 'aGames' | 'bGames', raw: string) => { const score = scoreFromInput(raw); if (raw !== '' && score === null) return; update(t => ({ ...t, matches: t.matches.map(match => { if (match.id !== id) return match; const aGames = side === 'aGames' ? score : match.result?.aGames ?? null; const bGames = side === 'bGames' ? score : match.result?.bGames ?? null; return withMatchResultScore(match, aGames, bGames); }) })); };
   const reset = (id: string) => { if (window.confirm('Vuoi cancellare il risultato di questa partita e riportarla tra quelle da giocare?')) update(t => ({ ...t, matches: t.matches.map(match => match.id === id ? resetMatchForReplay(match, t.settings.playMinutes, t.settings.warmupMinutes) : match) })); };
 
   return <>

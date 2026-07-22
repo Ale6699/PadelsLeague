@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { Match, Player, Tournament, defaultSettings } from '../models';
-import { calculateMatchOutcome, getMatchOutcome, validateMatchScore } from '../services/matchResults';
+import { calculateMatchOutcome, getMatchOutcome, validateMatchScore, withMatchResultScore } from '../services/matchResults';
+import { createLiveMatchState } from '../services/liveMatch';
 import { getStandings } from '../services/standings';
 
 const player = (id: string): Player => ({ id, firstName: id, lastName: '', level: 'Intermedio', gender: 'Uomo', notes: '', availability: [{ from: '09:00', to: '18:00' }], avoidPartners: [], status: 'attivo' });
@@ -22,5 +23,17 @@ describe('classifica derivata dai game', () => {
   it('non assegna punti a partita resettata o incompleta', () => {
     const reset = getStandings(tournament([match(null, null)])); const incomplete = getStandings(tournament([match(4, null)]));
     expect(reset.every(row => row.points === 0)).toBe(true); expect(incomplete.every(row => row.points === 0)).toBe(true);
+  });
+});
+
+describe('correzione risultato concluso', () => {
+  it('sincronizza i game nel live state con un timestamp più recente', () => {
+    const liveState = createLiveMatchState(12, 3);
+    const corrected = withMatchResultScore({ ...match(6, 3), status: 'completed', liveState }, 2, 5, 2000);
+    expect(corrected.result).toEqual({ aGames: 2, bGames: 5 });
+    expect(corrected.liveState?.score.teamAGames).toBe(2);
+    expect(corrected.liveState?.score.teamBGames).toBe(5);
+    expect(corrected.liveState?.score.lastUpdated).toBe(2000);
+    expect(corrected.liveState?.lastUpdated).toBe(2000);
   });
 });
