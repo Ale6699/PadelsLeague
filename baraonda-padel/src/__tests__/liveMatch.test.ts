@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { AdvantageTeam, LiveMatchScore, Match } from '../models';
 import { addScoreAction, awardPoint, createLiveMatchState, normalizeLiveMatchScore, normalizeLiveMatchState, redoScoreAction, resetMatchForReplay, restorePersistedTimer, undoScoreAction, validateLiveMatchScore } from '../services/liveMatch';
 
-const score = (a: LiveMatchScore['teamAPoints'] = 0, b: LiveMatchScore['teamBPoints'] = 0, gamesA = 0, gamesB = 0, advantageTeam: AdvantageTeam = null, lastUpdated = 0): LiveMatchScore => ({ teamAPoints: a, teamBPoints: b, advantageTeam, teamAGames: gamesA, teamBGames: gamesB, lastUpdated });
+const score = (a: LiveMatchScore['teamAPoints'] = 0, b: LiveMatchScore['teamBPoints'] = 0, gamesA = 0, gamesB = 0, advantageTeam: AdvantageTeam = null, lastUpdated = 0, deuceCount = 0): LiveMatchScore => ({ teamAPoints: a, teamBPoints: b, advantageTeam, teamAGames: gamesA, teamBGames: gamesB, deuceCount, lastUpdated });
 
 describe('punteggio live con vantaggi', () => {
   it('mantiene la sequenza 0, 15, 30, 40 e assegna il game prima della parità', () => {
@@ -66,6 +66,31 @@ describe('punteggio live con vantaggi', () => {
 
   it('normalizza i vecchi salvataggi con advantage nei punti', () => {
     expect(normalizeLiveMatchScore({ teamAPoints: 'advantage', teamBPoints: 40, teamAGames: 2, teamBGames: 1, lastUpdated: 10 })).toEqual(score(40, 40, 2, 1, 'team_a', 10));
+  });
+});
+
+describe('punto killer', () => {
+  it('golden point (afterDeuces 0): il primo 40–40 è decisivo', () => {
+    const killer = { enabled: true, afterDeuces: 0 };
+    const deuce = awardPoint(score(40, 30), 'team_b', 6, killer);
+    expect(deuce).toMatchObject({ teamAPoints: 40, teamBPoints: 40, advantageTeam: null, deuceCount: 1 });
+    expect(awardPoint(deuce, 'team_a', 6, killer)).toMatchObject({ teamAGames: 1, teamAPoints: 0, teamBPoints: 0, advantageTeam: null });
+  });
+
+  it('afterDeuces 1: si gioca un vantaggio, poi il punto successivo in parità è decisivo', () => {
+    const killer = { enabled: true, afterDeuces: 1 };
+    let next = awardPoint(score(40, 30), 'team_b', 6, killer); // primo 40–40 (deuceCount 1)
+    next = awardPoint(next, 'team_a', 6, killer); expect(next.advantageTeam).toBe('team_a'); // primo vantaggio, non decisivo
+    next = awardPoint(next, 'team_b', 6, killer); expect(next).toMatchObject({ advantageTeam: null, deuceCount: 2 }); // torna in parità
+    expect(awardPoint(next, 'team_b', 6, killer)).toMatchObject({ teamBGames: 1, teamAPoints: 0, teamBPoints: 0 }); // punto killer
+  });
+
+  it('con killer disattivato il 40–40 resta a vantaggi', () => {
+    const killer = { enabled: false, afterDeuces: 0 };
+    let next = awardPoint(score(40, 30), 'team_b', 6, killer);
+    next = awardPoint(next, 'team_a', 6, killer);
+    expect(next.advantageTeam).toBe('team_a');
+    expect(next.teamAGames).toBe(0);
   });
 });
 

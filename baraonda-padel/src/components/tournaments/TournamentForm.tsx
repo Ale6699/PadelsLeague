@@ -42,6 +42,8 @@ export function TournamentForm({ mode, tournament, busy = false, mutationError, 
         <label>Minuti cambio/riscaldamento<input type="number" min="0" value={values.warmupMinutes} onChange={event => patch('warmupMinutes', Number(event.target.value))} />{fieldError('warmupMinutes')}</label>
         <label>Massimo partite per giocatore<input type="number" min="1" step="1" value={values.targetMatchesPerPlayer} onChange={event => patch('targetMatchesPerPlayer', Number(event.target.value))} />{fieldError('targetMatchesPerPlayer')}</label>
         <label>Massimo game<input type="number" min="1" value={values.maxGamesPerMatch} onChange={event => patch('maxGamesPerMatch', Number(event.target.value))} />{fieldError('maxGamesPerMatch')}</label>
+        <label className="check"><input type="checkbox" checked={values.killerPoint} onChange={event => patch('killerPoint', event.target.checked)} /> Punto killer (punto secco dopo le parità)</label>
+        <label>Parità a vantaggio prima del punto killer<input type="number" min="0" step="1" disabled={!values.killerPoint} value={values.killerPointAfterDeuces} onChange={event => patch('killerPointAfterDeuces', Number(event.target.value))} />{fieldError('killerPointAfterDeuces')}<small>0 = punto secco già dal primo 40–40 · 1 = dopo il primo vantaggio</small></label>
       </div></fieldset>
       <fieldset className="form-group"><legend>Pubblicazione</legend><div className="form-group-grid">
         <label>Slug pubblico<input value={values.publicSlug} placeholder="torneo-estate-2026" onChange={event => patch('publicSlug', event.target.value)} />{fieldError('publicSlug')}<small>/public/{values.publicSlug || '…'}</small></label>

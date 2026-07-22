@@ -4,7 +4,7 @@ import { mapSupabaseError } from './errors';
 import { tournamentStore } from '../storage';
 import { levelValue, uid } from '../models';
 import {
-  DEFAULT_LIQUIDITY, MAX_WINNER_ODDS, WINNER_LIQUIDITY, currentOdds, headToHeadProbability,
+  DEFAULT_LIQUIDITY, MAX_ODDS, MAX_WINNER_ODDS, WINNER_LIQUIDITY, currentOdds, headToHeadProbability,
   matchOutcomeProbabilities, overUnderProbabilities, payout, probabilityToOdds, teamStrength,
   tournamentWinnerProbabilities,
 } from '../services/bettingOdds';
@@ -121,7 +121,7 @@ const localTournament = (tournamentId: string) => tournamentStore.load().find(it
 // Riprezza le selezioni di un mercato locale con lo stesso blend del server (currentOdds).
 const repriceMarket = (market: BetMarket): BetMarket => {
   const total = market.selections.reduce((sum, selection) => sum + selection.stakePool, 0);
-  const maxOdds = market.kind === 'tournament_winner' ? MAX_WINNER_ODDS : Infinity;
+  const maxOdds = market.kind === 'tournament_winner' ? MAX_WINNER_ODDS : MAX_ODDS;
   return { ...market, selections: market.selections.map(selection => ({ ...selection, odds: currentOdds(selection.prior, selection.stakePool, total, market.liquidity, undefined, maxOdds) })) };
 };
 
@@ -133,7 +133,7 @@ const buildMatchMarkets = (tournamentId: string, tournament: NonNullable<LocalTo
   const [p1, p2, p3, p4] = match.players;
   const strengthA = teamStrength(level(p1), level(p2)); const strengthB = teamStrength(level(p3), level(p4));
   const outcome = matchOutcomeProbabilities(strengthA, strengthB);
-  const sel = (code: string, label: string, prior: number): BetSelection => ({ id: uid(), marketId: '', code, label, prior, stakePool: 0, odds: probabilityToOdds(prior), isWinner: null });
+  const sel = (code: string, label: string, prior: number): BetSelection => ({ id: uid(), marketId: '', code, label, prior, stakePool: 0, odds: probabilityToOdds(prior, undefined, MAX_ODDS), isWinner: null });
   const markets: BetMarket[] = [
     { id: uid(), tournamentId, matchId: match.id, kind: 'match_outcome', status: 'open', line: null, liquidity: DEFAULT_LIQUIDITY, params: {}, selections: [sel('A', 'Coppia A', outcome.pA), sel('B', 'Coppia B', outcome.pB), sel('draw', 'Pareggio', outcome.pDraw)] },
   ];
@@ -216,8 +216,8 @@ const localBetting: BettingProvider = {
     const a = tournament.players.find(player => player.id === playerA); const b = tournament.players.find(player => player.id === playerB); if (!a || !b) return;
     const priorA = headToHeadProbability(levelValue[a.level] - levelValue[b.level], 0);
     const market: BetMarket = { id: uid(), tournamentId, matchId: null, kind: 'head_to_head', status: 'open', line: null, liquidity: DEFAULT_LIQUIDITY, params: { playerA, playerB }, selections: [
-      { id: uid(), marketId: '', code: playerA, label: `${a.firstName} ${a.lastName}`, prior: priorA, stakePool: 0, odds: probabilityToOdds(priorA), isWinner: null },
-      { id: uid(), marketId: '', code: playerB, label: `${b.firstName} ${b.lastName}`, prior: 1 - priorA, stakePool: 0, odds: probabilityToOdds(1 - priorA), isWinner: null },
+      { id: uid(), marketId: '', code: playerA, label: `${a.firstName} ${a.lastName}`, prior: priorA, stakePool: 0, odds: probabilityToOdds(priorA, undefined, MAX_ODDS), isWinner: null },
+      { id: uid(), marketId: '', code: playerB, label: `${b.firstName} ${b.lastName}`, prior: 1 - priorA, stakePool: 0, odds: probabilityToOdds(1 - priorA, undefined, MAX_ODDS), isWinner: null },
     ] };
     market.selections.forEach(selection => { selection.marketId = market.id; });
     writeLocal(tournamentId, { ...state, markets: [...state.markets, market] });

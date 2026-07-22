@@ -12,7 +12,10 @@ export const MIN_ODDS = 1.01;
 // ha molte selezioni. MAX_WINNER_ODDS comprime il campo evitando quote enormi.
 export const DEFAULT_LIQUIDITY = 300;
 export const WINNER_LIQUIDITY = 800;
-export const MAX_WINNER_ODDS = 15;
+// Tetto generale sulle quote: taglia i longshot (esito partita, over/under, testa-a-testa) evitando
+// quote troppo alte. Il vincitore torneo ha un tetto proprio, più basso per comprimere il campo.
+export const MAX_ODDS = 8;
+export const MAX_WINNER_ODDS = 8;
 
 const clampProbability = (p: number) => Math.min(0.99, Math.max(0.01, p));
 const round2 = (value: number) => Math.round(value * 100) / 100;
@@ -54,7 +57,7 @@ export function matchOutcomeProbabilities(strengthA: number, strengthB: number):
 
 export function matchOutcomeOdds(strengthA: number, strengthB: number, margin = DEFAULT_MARGIN) {
   const { pA, pB, pDraw } = matchOutcomeProbabilities(strengthA, strengthB);
-  return { A: probabilityToOdds(pA, margin), B: probabilityToOdds(pB, margin), draw: probabilityToOdds(pDraw, margin) };
+  return { A: probabilityToOdds(pA, margin, MAX_ODDS), B: probabilityToOdds(pB, margin, MAX_ODDS), draw: probabilityToOdds(pDraw, margin, MAX_ODDS) };
 }
 
 export type OverUnderProbabilities = { pOver: number; pUnder: number };
@@ -69,7 +72,7 @@ export function overUnderProbabilities(strengthA: number, strengthB: number): Ov
 
 export function overUnderOdds(strengthA: number, strengthB: number, margin = DEFAULT_MARGIN) {
   const { pOver, pUnder } = overUnderProbabilities(strengthA, strengthB);
-  return { over: probabilityToOdds(pOver, margin), under: probabilityToOdds(pUnder, margin) };
+  return { over: probabilityToOdds(pOver, margin, MAX_ODDS), under: probabilityToOdds(pUnder, margin, MAX_ODDS) };
 }
 
 /** Linea over/under di default derivata dal formato partita (game massimi per match). */
@@ -84,7 +87,7 @@ export function headToHeadProbability(levelDifference: number, pointDifference: 
 
 export function headToHeadOdds(levelDifference: number, pointDifference: number, margin = DEFAULT_MARGIN) {
   const pFirst = headToHeadProbability(levelDifference, pointDifference);
-  return { first: probabilityToOdds(pFirst, margin), second: probabilityToOdds(1 - pFirst, margin) };
+  return { first: probabilityToOdds(pFirst, margin, MAX_ODDS), second: probabilityToOdds(1 - pFirst, margin, MAX_ODDS) };
 }
 
 export type WinnerEntry = { id: string; level: number; points: number };

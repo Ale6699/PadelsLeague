@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  DEFAULT_MARGIN, MAX_WINNER_ODDS, MIN_ODDS, blendedProbability, currentOdds, defaultOverUnderLine,
+  DEFAULT_MARGIN, MAX_ODDS, MAX_WINNER_ODDS, MIN_ODDS, blendedProbability, currentOdds, defaultOverUnderLine,
   headToHeadOdds, matchOutcomeOdds, matchOutcomeProbabilities, overUnderProbabilities, payout,
   probabilityToOdds, teamStrength, tournamentWinnerOdds, tournamentWinnerProbabilities,
 } from '../services/bettingOdds';
@@ -59,6 +59,17 @@ describe('headToHeadOdds', () => {
   it('favorisce chi ha livello e punti più alti', () => {
     const odds = headToHeadOdds(1, 3);
     expect(odds.first).toBeLessThan(odds.second);
+  });
+  it('non supera il tetto generale MAX_ODDS sui longshot', () => {
+    expect(headToHeadOdds(2, 4).second).toBeLessThanOrEqual(MAX_ODDS);
+  });
+});
+
+describe('tetto generale delle quote (MAX_ODDS)', () => {
+  it('taglia i longshot dell’esito partita', () => {
+    const odds = matchOutcomeOdds(6, 2);
+    expect(odds.B).toBeLessThanOrEqual(MAX_ODDS);
+    expect(Math.max(odds.A, odds.B, odds.draw)).toBeLessThanOrEqual(MAX_ODDS);
   });
 });
 

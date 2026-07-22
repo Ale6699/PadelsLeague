@@ -7,6 +7,7 @@ export const TOURNAMENT_FIELD_LABELS: Record<string, string> = {
   name: 'Nome torneo', publicTitle: 'Titolo pubblico', date: 'Data', start: 'Ora di inizio', end: 'Ora di fine',
   playMinutes: 'Durata partita', warmupMinutes: 'Cambio/riscaldamento', targetMatchesPerPlayer: 'Massimo partite per giocatore',
   maxGamesPerMatch: 'Massimo game', prioritizeMixed: 'Preferenza coppie miste', gameScoringMode: 'Regole di punteggio',
+  killerPoint: 'Punto killer', killerPointAfterDeuces: 'Parità prima del punto killer',
   notes: 'Note pubbliche', status: 'Stato', isPublic: 'Visibilità pubblica', publicSlug: 'Link pubblico',
   timerSoundEnabled: 'Suono timer', pauses: 'Pause',
 };
@@ -19,7 +20,8 @@ export function tournamentToFormValues(tournament: Tournament): TournamentFormVa
     start: tournament.settings.start, end: tournament.settings.end, playMinutes: tournament.settings.playMinutes,
     warmupMinutes: tournament.settings.warmupMinutes, targetMatchesPerPlayer: tournament.settings.targetMatchesPerPlayer,
     maxGamesPerMatch: tournament.settings.maxGamesPerMatch ?? 6, prioritizeMixed: tournament.settings.prioritizeMixed,
-    gameScoringMode: 'advantages', notes: tournament.notes ?? '', status: tournament.status ?? 'draft',
+    gameScoringMode: 'advantages', killerPoint: tournament.settings.killerPoint ?? false, killerPointAfterDeuces: tournament.settings.killerPointAfterDeuces ?? 1,
+    notes: tournament.notes ?? '', status: tournament.status ?? 'draft',
     isPublic: tournament.isPublic ?? false, publicSlug: tournament.publicSlug ?? '',
     timerSoundEnabled: tournament.timerSoundEnabled ?? true, pauses: tournament.settings.pauses.map(pause => ({ ...pause })),
   };
@@ -32,7 +34,8 @@ export function applyTournamentFormValues(tournament: Tournament, values: Tourna
     settings: { ...tournament.settings, title: values.publicTitle.trim(), date: values.date, start: values.start, end: values.end,
       playMinutes: values.playMinutes, warmupMinutes: values.warmupMinutes, targetMatchesPerPlayer: values.targetMatchesPerPlayer,
       maxGamesPerMatch: values.maxGamesPerMatch, prioritizeMixed: values.prioritizeMixed,
-      gameScoringMode: values.gameScoringMode, pauses: values.pauses.map(pause => ({ ...pause })) },
+      gameScoringMode: values.gameScoringMode, killerPoint: values.killerPoint, killerPointAfterDeuces: values.killerPointAfterDeuces,
+      pauses: values.pauses.map(pause => ({ ...pause })) },
   };
 }
 

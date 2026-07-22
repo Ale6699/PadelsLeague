@@ -152,76 +152,6 @@ export function generateSchedule(tournament: Tournament, keepLocked = true, opti
     return [samePairs, previousGroupCounts.get(group) ?? 0, previousTimedGroupCounts.get(`${start}|${group}`) ?? 0];
   };
 
-  const temporalScore = (generated: Match[]) => {
-    const appearances: number[][] = Array.from({ length: n }, () => []);
-    [...protectedMatches, ...generated].forEach(match => {
-      const slotIndex = slotIndexByStart.get(match.start);
-      if (slotIndex === undefined) return;
-      match.players.forEach(id => { const playerIndex = indexOf.get(id); if (playerIndex !== undefined) appearances[playerIndex].push(slotIndex); });
-    });
-    let worstRun = 0; let consecutive = 0; let worstSpacing = 0; let totalSpacing = 0;
-    appearances.forEach((items, playerIndex) => {
-      items.sort((a, b) => a - b);
-      let run = items.length ? 1 : 0; let playerWorstRun = run;
-      for (let itemIndex = 1; itemIndex < items.length; itemIndex += 1) {
-        if (slots[items[itemIndex - 1]].end === slots[items[itemIndex]].start) { run += 1; consecutive += 1; } else run = 1;
-        playerWorstRun = Math.max(playerWorstRun, run);
-      }
-      worstRun = Math.max(worstRun, playerWorstRun);
-      if (!items.length) return;
-      const ranks = items.map(slotIndex => availabilityPrefix[playerIndex][slotIndex]);
-      const gaps = [ranks[0], ...ranks.slice(1).map((rank, rankIndex) => rank - ranks[rankIndex] - 1), availabilityPrefix[playerIndex][slots.length] - ranks[ranks.length - 1] - 1];
-      const restingSlots = gaps.reduce((sum, gap) => sum + gap, 0);
-      const scaledSpacing = gaps.reduce((sum, gap) => sum + (gap * gaps.length - restingSlots) ** 2, 0);
-      const normalizedSpacing = Math.round(scaledSpacing * 1000 / Math.max(1, availabilityPrefix[playerIndex][slots.length] ** 2 * gaps.length));
-      worstSpacing = Math.max(worstSpacing, normalizedSpacing); totalSpacing += normalizedSpacing;
-    });
-    return [worstRun, consecutive, worstSpacing, totalSpacing];
-  };
-
-  const improveTemporalSpread = (matches: Match[]) => {
-    const working = matches.map(match => ({ ...match, players: [...match.players] as Match['players'], violations: [...match.violations] }));
-    let currentScore = temporalScore(working);
-    const improvementIterations = n >= 24 ? 1 : 3;
-    for (let iteration = 0; iteration < improvementIterations; iteration += 1) {
-      let bestScore = currentScore; let bestAction: { type: 'move'; matchIndex: number; slotIndex: number } | { type: 'swap'; firstMatch: number; firstPosition: number; secondMatch: number; secondPosition: number } | undefined;
-      const occupied = new Set([...protectedMatches, ...working].map(match => match.start));
-      for (let matchIndex = 0; matchIndex < working.length; matchIndex += 1) {
-        const match = working[matchIndex]; const originalStart = match.start; const originalEnd = match.end;
-        for (let slotIndex = 0; slotIndex < slots.length; slotIndex += 1) {
-          const slot = slots[slotIndex];
-          if (occupied.has(slot.start) || !match.players.every(id => { const playerIndex = indexOf.get(id); return playerIndex !== undefined && availMat[playerIndex][slotIndex]; })) continue;
-          match.start = slot.start; match.end = slot.end;
-          const candidateScore = temporalScore(working);
-          match.start = originalStart; match.end = originalEnd;
-          if (compareArrays(candidateScore, bestScore) < 0) { bestScore = candidateScore; bestAction = { type: 'move', matchIndex, slotIndex }; }
-        }
-      }
-      for (let firstMatch = 0; firstMatch < working.length - 1; firstMatch += 1) for (let secondMatch = firstMatch + 1; secondMatch < working.length; secondMatch += 1) {
-        const first = working[firstMatch]; const second = working[secondMatch]; const firstSlot = slotIndexByStart.get(first.start); const secondSlot = slotIndexByStart.get(second.start);
-        if (firstSlot === undefined || secondSlot === undefined) continue;
-        for (let firstPosition = 0; firstPosition < 4; firstPosition += 1) for (let secondPosition = 0; secondPosition < 4; secondPosition += 1) {
-          const firstId = first.players[firstPosition]; const secondId = second.players[secondPosition];
-          if (firstId === secondId || first.players.includes(secondId) || second.players.includes(firstId)) continue;
-          const firstPlayer = indexOf.get(firstId); const secondPlayer = indexOf.get(secondId);
-          if (firstPlayer === undefined || secondPlayer === undefined || !availMat[firstPlayer][secondSlot] || !availMat[secondPlayer][firstSlot]) continue;
-          first.players[firstPosition] = secondId; second.players[secondPosition] = firstId;
-          const candidateScore = temporalScore(working);
-          first.players[firstPosition] = firstId; second.players[secondPosition] = secondId;
-          if (compareArrays(candidateScore, bestScore) < 0) bestAction = { type: 'swap', firstMatch, firstPosition, secondMatch, secondPosition }, bestScore = candidateScore;
-        }
-      }
-      if (!bestAction) break;
-      if (bestAction.type === 'move') {
-        const slot = slots[bestAction.slotIndex]; working[bestAction.matchIndex].start = slot.start; working[bestAction.matchIndex].end = slot.end;
-      } else {
-        const first = working[bestAction.firstMatch]; const second = working[bestAction.secondMatch]; const firstId = first.players[bestAction.firstPosition]; first.players[bestAction.firstPosition] = second.players[bestAction.secondPosition]; second.players[bestAction.secondPosition] = firstId;
-      }
-      currentScore = bestScore;
-    }
-    return working.sort((a, b) => a.start.localeCompare(b.start));
-  };
-
   const rebuildPairings = (matches: Match[]) => {
     const partnerCounts = protectedPartners.map(row => [...row]);
     return matches.map(match => {
@@ -353,8 +283,8 @@ export function generateSchedule(tournament: Tournament, keepLocked = true, opti
         best = shortlist[Math.floor(random() * shortlist.length)];
       }
       if (!best) continue;
-      const mustUseSlot = urgentTotal > 0 || seatsLeft > remainingOpenSlots[slotIndex + 1] * 4;
-      if (!mustUseSlot && best.progress >= 0) continue;
+      // Calendario compatto: riempi ogni slot aperto con una partita valida (niente slot vuoti).
+      // Il riposo tra i turni resta una penalità nella scelta dei 4 giocatori (priority/rest), non un buco nel calendario.
       const slot = slots[slotIndex];
       const [one, two, three, four] = best.pairing.map(playerIndex => players[playerIndex]);
       const violations: string[] = [];
@@ -372,7 +302,7 @@ export function generateSchedule(tournament: Tournament, keepLocked = true, opti
     }
 
     if (!failed && deficits.every(deficit => deficit === 0)) {
-      const optimized = rebuildPairings(improveTemporalSpread(generated));
+      const optimized = rebuildPairings(generated);
       return { status: 'generated', matches: [...protectedMatches, ...optimized].sort((a, b) => a.start.localeCompare(b.start)), requestedMax, commonMatchesPerPlayer: target, excludedPlayerIds };
     }
   }

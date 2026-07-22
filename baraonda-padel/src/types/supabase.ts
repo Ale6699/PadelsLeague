@@ -854,6 +854,8 @@ export type Database = {
           generator_preferences: Json
           id: string
           is_public: boolean
+          killer_point_after_deuces: number
+          killer_point_enabled: boolean
           match_duration_minutes: number
           max_games_per_match: number
           name: string
@@ -884,6 +886,8 @@ export type Database = {
           generator_preferences?: Json
           id?: string
           is_public?: boolean
+          killer_point_after_deuces?: number
+          killer_point_enabled?: boolean
           match_duration_minutes?: number
           max_games_per_match?: number
           name: string
@@ -914,6 +918,8 @@ export type Database = {
           generator_preferences?: Json
           id?: string
           is_public?: boolean
+          killer_point_after_deuces?: number
+          killer_point_enabled?: boolean
           match_duration_minutes?: number
           max_games_per_match?: number
           name?: string

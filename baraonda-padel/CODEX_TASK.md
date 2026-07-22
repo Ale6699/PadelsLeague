@@ -44,14 +44,14 @@ Non servono riserve o partecipanti non confermati.
 - Sempre doppio 2 contro 2.
 - Le coppie cambiano a ogni turno.
 - Ogni giocatore ha un punteggio individuale.
-- Sono consentiti turni consecutivi, ma il generatore deve privilegiare il riposo.
-- Lasciare inutilizzati gli slot eccedenti quando serve a mantenere lo stesso numero di partite per tutti.
+- Sono consentiti turni consecutivi, ma il generatore deve evitarli quando possibile scegliendo i giocatori di ogni slot.
+- Il calendario è compatto: le partite riempiono gli slot uno dopo l'altro dal primo slot disponibile, senza lasciare buchi. Gli unici slot vuoti ammessi sono in coda (dopo l'ultima partita) o quando uno slot non ha abbastanza giocatori disponibili.
 
 ## Priorità del generatore
 
 In ordine:
 
-1. privilegiare il riposo ed evitare, quando possibile, turni consecutivi;
+1. compattare le partite senza lasciare slot vuoti, evitando i turni consecutivi quando possibile nella scelta dei giocatori;
 2. massimizzare la varietà dei compagni e ridurre al minimo le coppie ripetute;
 3. rispettare la disponibilità oraria;
 4. rendere obbligatorio lo stesso numero di partite per tutti, senza superare il massimo configurato;

@@ -14,18 +14,23 @@ export function MatchDashboard({ tournament, match, index, onClose, onPersist, o
   const names = new Map(tournament.players.map(player => [player.id, fullName(player)]));
   const [feedback, setFeedback] = useState('');
   const maxGames = tournament.settings.maxGamesPerMatch ?? 6;
-  const dashboard = useMatchDashboard({ match, durationMinutes: tournament.settings.playMinutes || 12, warmupMinutes: tournament.settings.warmupMinutes || 3, maxGames, onPersist });
+  const killer = tournament.settings.killerPoint ? { enabled: true, afterDeuces: tournament.settings.killerPointAfterDeuces ?? 1 } : undefined;
+  const dashboard = useMatchDashboard({ match, durationMinutes: tournament.settings.playMinutes || 12, warmupMinutes: tournament.settings.warmupMinutes || 3, maxGames, killer, onPersist });
   const completed = dashboard.status === 'completed';
   const phase = dashboard.live.phase;
   const outcome = calculateMatchOutcome(dashboard.live.score.teamAGames, dashboard.live.score.teamBGames);
   const unfinishedGame = describeUnfinishedGame(dashboard.live.score);
+  const atDeuce = dashboard.live.score.teamAPoints === 40 && dashboard.live.score.teamBPoints === 40;
+  const killerDecisive = atDeuce && !!killer && dashboard.live.score.deuceCount > killer.afterDeuces;
   const pointStatus = dashboard.live.score.advantageTeam === 'team_a'
     ? 'VANTAGGIO COPPIA A'
     : dashboard.live.score.advantageTeam === 'team_b'
       ? 'VANTAGGIO COPPIA B'
-      : dashboard.live.score.teamAPoints === 40 && dashboard.live.score.teamBPoints === 40
-        ? 'PARITÀ · 40–40'
-        : null;
+      : killerDecisive
+        ? 'PUNTO KILLER · 40–40'
+        : atDeuce
+          ? 'PARITÀ · 40–40'
+          : null;
   const award = useCallback((team: 'team_a' | 'team_b') => {
     if (completed || phase !== 'playing') return;
     dashboard.point(team);
@@ -50,6 +55,7 @@ export function MatchDashboard({ tournament, match, index, onClose, onPersist, o
       else if (event.key.toLowerCase() === 'a') award('team_a');
       else if (event.key.toLowerCase() === 'l') award('team_b');
       else if (event.key === ' ') { event.preventDefault(); if (phase === 'warmup') dashboard.live.warmupTimer.status === 'running' ? dashboard.pauseWarmup() : dashboard.startWarmup(); else dashboard.live.timer.status === 'running' ? dashboard.pauseTimer() : dashboard.startTimer(); }
+      else if (event.key === 'Enter' && phase === 'warmup') { event.preventDefault(); dashboard.confirmMatchStart(); }
       else if (event.key.toLowerCase() === 'f') void toggleFullscreen();
     };
     window.addEventListener('keydown', shortcut);
@@ -87,7 +93,7 @@ export function MatchDashboard({ tournament, match, index, onClose, onPersist, o
       {feedback && <div className="point-feedback" role="status">{feedback}</div>}
       {phase === 'warmup' ? <div className="dashboard-primary-controls">
         <button onClick={dashboard.live.warmupTimer.status === 'running' ? dashboard.pauseWarmup : dashboard.startWarmup}>{dashboard.live.warmupTimer.status === 'running' ? <Pause /> : <Play />}{dashboard.live.warmupTimer.status === 'paused' ? 'Riprendi' : dashboard.live.warmupTimer.status === 'running' ? 'Pausa' : 'Avvia riscaldamento'}</button>
-        <button className="finish-button" disabled={dashboard.live.warmupTimer.status !== 'expired'} onClick={dashboard.confirmMatchStart}><Play /> Avvia partita</button>
+        <button className="finish-button" onClick={dashboard.confirmMatchStart}><Play /> {dashboard.live.warmupTimer.status === 'expired' ? 'Avvia partita' : 'Salta riscaldamento'}</button>
       </div> : <div className="dashboard-primary-controls">
         <button disabled={completed} onClick={dashboard.live.timer.status === 'running' ? dashboard.pauseTimer : dashboard.startTimer}>{dashboard.live.timer.status === 'running' ? <Pause /> : <Play />}{dashboard.live.timer.status === 'paused' ? 'Riprendi' : dashboard.live.timer.status === 'running' ? 'Pausa' : 'Avvia'}</button>
         <button className="secondary" disabled={!dashboard.live.history.length || completed} onClick={dashboard.undo}><Undo2 /> Annulla punto</button>

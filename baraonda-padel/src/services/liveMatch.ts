@@ -1,4 +1,4 @@
-import { AdvantageTeam, LiveMatchScore, LiveMatchState, LiveScoreValidationResult, Match, MatchPhase, MatchTimerState, PadelPointValue, ScoreAction, uid } from '../models';
+import { AdvantageTeam, KillerPointConfig, LiveMatchScore, LiveMatchState, LiveScoreValidationResult, Match, MatchPhase, MatchTimerState, PadelPointValue, ScoreAction, uid } from '../models';
 
 export const DEFAULT_MAX_GAMES = 6;
 export const pointOrder: PadelPointValue[] = [0, 15, 30, 40];
@@ -14,7 +14,7 @@ export function createLiveMatchState(durationMinutes = 12, warmupMinutes = 3): L
     timer: { status: 'idle', durationMilliseconds, remainingMilliseconds: durationMilliseconds, startedAt: null, endsAt: null, updatedAt: now },
     warmupTimer: { status: 'running', durationMilliseconds: warmupDurationMilliseconds, remainingMilliseconds: warmupDurationMilliseconds, startedAt: now, endsAt: now + warmupDurationMilliseconds, updatedAt: now },
     phase: 'warmup',
-    score: { teamAPoints: 0, teamBPoints: 0, advantageTeam: null, teamAGames: 0, teamBGames: 0, lastUpdated: now },
+    score: { teamAPoints: 0, teamBPoints: 0, advantageTeam: null, teamAGames: 0, teamBGames: 0, deuceCount: 0, lastUpdated: now },
     history: [], redo: [], servingTeam: 'team_a', audioEnabled: true, lastUpdated: now,
   };
 }
@@ -34,12 +34,16 @@ export function normalizeLiveMatchScore(value: unknown, maxGames = DEFAULT_MAX_G
   const advantageTeam = teamAPoints === 40 && teamBPoints === 40 ? requestedAdvantage : null;
   const limit = Number.isInteger(maxGames) && maxGames >= 0 ? maxGames : DEFAULT_MAX_GAMES;
   const games = (candidate: unknown) => Number.isInteger(candidate) ? Math.min(limit, Math.max(0, candidate as number)) : 0;
+  const rawDeuce = score.deuceCount;
+  const parsedDeuce = typeof rawDeuce === 'number' && Number.isFinite(rawDeuce) && rawDeuce >= 0 ? Math.floor(rawDeuce) : 0;
   return {
     teamAPoints,
     teamBPoints,
     advantageTeam,
     teamAGames: games(score.teamAGames),
     teamBGames: games(score.teamBGames),
+    // Il contatore delle parità vale solo durante un 40-40; fuori dal deuce si azzera.
+    deuceCount: teamAPoints === 40 && teamBPoints === 40 ? parsedDeuce : 0,
     lastUpdated: typeof score.lastUpdated === 'number' && Number.isFinite(score.lastUpdated) ? score.lastUpdated : Date.now(),
   };
 }
@@ -72,7 +76,7 @@ export function normalizeLiveMatchState(value: unknown, durationMinutes = 12, ma
   };
 }
 
-export function awardPoint(score: LiveMatchScore, winningTeam: 'team_a' | 'team_b', maxGames = DEFAULT_MAX_GAMES): LiveMatchScore {
+export function awardPoint(score: LiveMatchScore, winningTeam: 'team_a' | 'team_b', maxGames = DEFAULT_MAX_GAMES, killer?: KillerPointConfig): LiveMatchScore {
   const limit = Number.isInteger(maxGames) && maxGames >= 0 ? maxGames : DEFAULT_MAX_GAMES;
   const next = normalizeLiveMatchScore(score, limit);
   const winnerPointsKey = winningTeam === 'team_a' ? 'teamAPoints' : 'teamBPoints';
@@ -81,17 +85,23 @@ export function awardPoint(score: LiveMatchScore, winningTeam: 'team_a' | 'team_
   const losingTeam = winningTeam === 'team_a' ? 'team_b' : 'team_a';
 
   if (next.teamAPoints === 40 && next.teamBPoints === 40) {
+    // Punto killer: dopo `afterDeuces` parità giocate a vantaggio, il punto è decisivo (chi lo vince prende il game).
+    if (killer?.enabled && next.deuceCount > killer.afterDeuces) return winGame(next, winnerGamesKey, limit);
     if (next.advantageTeam === winningTeam) return winGame(next, winnerGamesKey, limit);
-    return { ...next, advantageTeam: next.advantageTeam === losingTeam ? null : winningTeam, lastUpdated: Date.now() };
+    // Ritorno in parità dopo un vantaggio del perdente: nuova parità → incrementa il contatore.
+    if (next.advantageTeam === losingTeam) return { ...next, advantageTeam: null, deuceCount: next.deuceCount + 1, lastUpdated: Date.now() };
+    return { ...next, advantageTeam: winningTeam, lastUpdated: Date.now() };
   }
 
   if (next[winnerPointsKey] === 40) return winGame(next, winnerGamesKey, limit);
-  return { ...next, [winnerPointsKey]: nextPoint(next[winnerPointsKey]), advantageTeam: null, lastUpdated: Date.now() };
+  const incremented = nextPoint(next[winnerPointsKey]);
+  const reachedDeuce = incremented === 40 && next[loserPointsKey] === 40;
+  return { ...next, [winnerPointsKey]: incremented, advantageTeam: null, deuceCount: reachedDeuce ? next.deuceCount + 1 : next.deuceCount, lastUpdated: Date.now() };
 }
 
 function winGame(score: LiveMatchScore, winnerGamesKey: 'teamAGames' | 'teamBGames', maxGames: number): LiveMatchScore {
   const games = Math.min(maxGames, score[winnerGamesKey] + 1);
-  return { ...score, [winnerGamesKey]: games, teamAPoints: 0, teamBPoints: 0, advantageTeam: null, lastUpdated: Date.now() };
+  return { ...score, [winnerGamesKey]: games, teamAPoints: 0, teamBPoints: 0, advantageTeam: null, deuceCount: 0, lastUpdated: Date.now() };
 }
 
 export function validateLiveMatchScore(score: LiveMatchScore, maxGames = DEFAULT_MAX_GAMES): LiveScoreValidationResult {

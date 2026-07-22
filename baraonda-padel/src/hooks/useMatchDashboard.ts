@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { LiveMatchScore, LiveMatchState, Match, MatchStatus } from '../models';
+import { KillerPointConfig, LiveMatchScore, LiveMatchState, Match, MatchStatus } from '../models';
 import { addScoreAction, awardPoint, createLiveMatchState, getLiveStateUpdatedAt, getRemainingMilliseconds, normalizeLiveMatchState, redoScoreAction, restorePersistedTimer, undoScoreAction, validateLiveMatchScore } from '../services/liveMatch';
 
-type Options = { match: Match; durationMinutes: number; warmupMinutes: number; maxGames: number; onPersist: (live: LiveMatchState, status: MatchStatus) => void };
+type Options = { match: Match; durationMinutes: number; warmupMinutes: number; maxGames: number; killer?: KillerPointConfig; onPersist: (live: LiveMatchState, status: MatchStatus) => void };
 const playExpirySignal = () => { try { const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext; if (!AudioContextClass) return; const context = new AudioContextClass(); const oscillator = context.createOscillator(); oscillator.frequency.value = 880; oscillator.connect(context.destination); oscillator.start(); oscillator.stop(context.currentTime + .22); } catch { /* Audio is optional. */ } };
 
-export function useMatchDashboard({ match, durationMinutes, warmupMinutes, maxGames, onPersist }: Options) {
+export function useMatchDashboard({ match, durationMinutes, warmupMinutes, maxGames, killer, onPersist }: Options) {
   const matchIdRef = useRef(match.id);
   const [live, setLive] = useState<LiveMatchState>(() => {
     if (!match.liveState) return createLiveMatchState(durationMinutes, warmupMinutes);
@@ -38,9 +38,9 @@ export function useMatchDashboard({ match, durationMinutes, warmupMinutes, maxGa
   const pauseTimer = useCallback(() => updateTimer(current => { const remaining = getRemainingMilliseconds(current.timer); const updatedAt = Date.now(); setStatus('paused'); return { ...current, timer: { ...current.timer, status: 'paused', remainingMilliseconds: remaining, endsAt: null, updatedAt }, lastUpdated: updatedAt }; }), [updateTimer]);
   const resetTimer = useCallback(() => updateTimer(current => { const updatedAt = Date.now(); return { ...current, timer: { ...current.timer, status: 'idle', remainingMilliseconds: current.timer.durationMilliseconds, startedAt: null, endsAt: null, updatedAt }, lastUpdated: updatedAt }; }), [updateTimer]);
   const adjustTimer = useCallback((milliseconds: number) => updateTimer(current => { const remaining = Math.max(0, getRemainingMilliseconds(current.timer) + milliseconds); const nowTime = Date.now(); return { ...current, timer: { ...current.timer, status: remaining === 0 ? 'expired' : current.timer.status === 'running' ? 'running' : 'paused', remainingMilliseconds: remaining, endsAt: current.timer.status === 'running' ? nowTime + remaining : null, updatedAt: nowTime }, lastUpdated: nowTime }; }), [updateTimer]);
-  const point = useCallback((team: 'team_a' | 'team_b') => { if (status === 'completed' || live.phase !== 'playing') return; setLive(current => addScoreAction(current, team === 'team_a' ? 'point_team_a' : 'point_team_b', awardPoint(current.score, team, maxGames))); }, [live.phase, maxGames, status]);
+  const point = useCallback((team: 'team_a' | 'team_b') => { if (status === 'completed' || live.phase !== 'playing') return; setLive(current => addScoreAction(current, team === 'team_a' ? 'point_team_a' : 'point_team_b', awardPoint(current.score, team, maxGames, killer))); }, [killer?.afterDeuces, killer?.enabled, live.phase, maxGames, status]);
   const setManualScore = useCallback((score: LiveMatchScore) => { const validation = validateLiveMatchScore(score, maxGames); if (validation.valid) setLive(current => addScoreAction(current, 'manual_score_change', { ...score, lastUpdated: Date.now() })); return validation; }, [maxGames]);
-  const resetCurrentGame = useCallback(() => setLive(current => addScoreAction(current, 'reset_current_game', { ...current.score, teamAPoints: 0, teamBPoints: 0, advantageTeam: null, lastUpdated: Date.now() })), []);
+  const resetCurrentGame = useCallback(() => setLive(current => addScoreAction(current, 'reset_current_game', { ...current.score, teamAPoints: 0, teamBPoints: 0, advantageTeam: null, deuceCount: 0, lastUpdated: Date.now() })), []);
   const undo = useCallback(() => setLive(undoScoreAction), []); const redo = useCallback(() => setLive(redoScoreAction), []);
   const finish = useCallback(() => { setStatus('completed'); setLive(current => { const updatedAt = Date.now(); return { ...current, timer: { ...current.timer, status: 'completed', remainingMilliseconds: getRemainingMilliseconds(current.timer), endsAt: null, updatedAt }, lastUpdated: updatedAt }; }); }, []);
   const resetMatch = useCallback(() => { const reset = createLiveMatchState(durationMinutes, warmupMinutes); setStatus('scheduled'); setLive(reset); return reset; }, [durationMinutes, warmupMinutes]);

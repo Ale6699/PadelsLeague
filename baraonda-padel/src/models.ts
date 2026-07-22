@@ -17,8 +17,10 @@ export type TournamentStatus = 'draft' | 'scheduled' | 'in_progress' | 'complete
 export type PadelPointValue = 0 | 15 | 30 | 40;
 export type PointScore = PadelPointValue;
 export type AdvantageTeam = 'team_a' | 'team_b' | null;
-export type LiveMatchScore = { teamAPoints: PadelPointValue; teamBPoints: PadelPointValue; advantageTeam: AdvantageTeam; teamAGames: number; teamBGames: number; lastUpdated: number };
+export type LiveMatchScore = { teamAPoints: PadelPointValue; teamBPoints: PadelPointValue; advantageTeam: AdvantageTeam; teamAGames: number; teamBGames: number; deuceCount: number; lastUpdated: number };
 export type LiveScoreValidationResult = { valid: boolean; errors: string[] };
+/** Punto killer: dopo `afterDeuces` parità (40-40) giocate a vantaggio, il punto successivo è decisivo. afterDeuces 0 = golden point dal primo 40-40. */
+export type KillerPointConfig = { enabled: boolean; afterDeuces: number };
 export type MatchTimerState = { status: MatchTimerStatus; durationMilliseconds: number; remainingMilliseconds: number; startedAt: number | null; endsAt: number | null; updatedAt: number };
 export type MatchPhase = 'warmup' | 'coin_toss' | 'playing';
 export type ScoreAction = { id: string; timestamp: number; type: 'point_team_a' | 'point_team_b' | 'manual_score_change' | 'reset_current_game' | 'reset_match'; previousScore: LiveMatchScore; nextScore: LiveMatchScore; previousServingTeam: 'team_a' | 'team_b'; nextServingTeam: 'team_a' | 'team_b' };
@@ -30,6 +32,7 @@ export type Match = {
 export type Settings = {
   title: string; date: string; start: string; end: string; playMinutes: number; warmupMinutes: number;
   pauses: Pause[]; targetMatchesPerPlayer: number; prioritizeMixed: boolean; gameScoringMode?: GameScoringMode; maxGamesPerMatch?: number;
+  killerPoint?: boolean; killerPointAfterDeuces?: number;
 };
 export type Tournament = {
   id: string; name: string; settings: Settings; players: Player[]; matches: Match[];
@@ -51,7 +54,7 @@ export const fullName = (player: Player) => `${player.firstName} ${player.lastNa
 export const defaultSettings: Settings = {
   title: 'Baraonda Padel Sistemi Tre', date: new Date().toISOString().slice(0, 10), start: '10:00', end: '19:00',
   playMinutes: 12, warmupMinutes: 3, pauses: [], targetMatchesPerPlayer: 8, prioritizeMixed: true,
-  gameScoringMode: 'advantages', maxGamesPerMatch: 6,
+  gameScoringMode: 'advantages', maxGamesPerMatch: 6, killerPoint: false, killerPointAfterDeuces: 1,
 };
 
 export const DEFAULT_BETTING_BALANCE = 1000;
