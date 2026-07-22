@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { KillerPointConfig, LiveMatchScore, LiveMatchState, Match, MatchStatus } from '../models';
 import { addScoreAction, awardPoint, createLiveMatchState, getLiveStateUpdatedAt, getRemainingMilliseconds, normalizeLiveMatchState, redoScoreAction, restorePersistedTimer, undoScoreAction, validateLiveMatchScore } from '../services/liveMatch';
 
-type Options = { match: Match; durationMinutes: number; warmupMinutes: number; maxGames: number; killer?: KillerPointConfig; onPersist: (live: LiveMatchState, status: MatchStatus) => void };
+type Options = { match: Match; durationMinutes: number; warmupMinutes: number; maxGames: number; killer?: KillerPointConfig; onPersist: (live: LiveMatchState, status: MatchStatus, matchId: string) => void };
 const playExpirySignal = () => { try { const AudioContextClass = window.AudioContext ?? (window as typeof window & { webkitAudioContext?: typeof AudioContext }).webkitAudioContext; if (!AudioContextClass) return; const context = new AudioContextClass(); const oscillator = context.createOscillator(); oscillator.frequency.value = 880; oscillator.connect(context.destination); oscillator.start(); oscillator.stop(context.currentTime + .22); } catch { /* Audio is optional. */ } };
 
 export function useMatchDashboard({ match, durationMinutes, warmupMinutes, maxGames, killer, onPersist }: Options) {
@@ -13,6 +13,13 @@ export function useMatchDashboard({ match, durationMinutes, warmupMinutes, maxGa
     return normalizeLiveMatchState(restored, durationMinutes, maxGames);
   });
   const [status, setStatus] = useState<MatchStatus>(match.status ?? 'scheduled'); const [now, setNow] = useState(Date.now());
+  // Deve girare PRIMA dell'effetto di sincronizzazione sotto: quando in questo stesso commit
+  // `match` sta già passando alla partita successiva (es. fine partita che avanza), matchIdRef
+  // vale ancora l'id a cui appartengono i live/status appena aggiornati. Se leggesse l'id dopo
+  // che l'effetto sotto lo ha già spostato sulla partita nuova, persisterebbe lo stato della
+  // partita appena conclusa sull'id sbagliato (quella successiva), lasciando la conclusa non
+  // segnata come completata al prossimo reload.
+  useEffect(() => { onPersist(live, status, matchIdRef.current); }, [live, onPersist, status]);
   useEffect(() => {
     const isDifferentMatch = matchIdRef.current !== match.id;
     matchIdRef.current = match.id;
@@ -20,7 +27,6 @@ export function useMatchDashboard({ match, durationMinutes, warmupMinutes, maxGa
     if (incoming) setLive(current => isDifferentMatch || getLiveStateUpdatedAt(incoming) > getLiveStateUpdatedAt(current) ? incoming : current);
     setStatus(match.status ?? 'scheduled');
   }, [durationMinutes, match.id, match.liveState, match.status, maxGames, warmupMinutes]);
-  useEffect(() => { onPersist(live, status); }, [live, onPersist, status]);
   const remainingMilliseconds = useMemo(() => getRemainingMilliseconds(live.timer, now), [live.timer, now]);
   const remainingWarmupMilliseconds = useMemo(() => getRemainingMilliseconds(live.warmupTimer, now), [live.warmupTimer, now]);
   useEffect(() => { if (live.timer.status !== 'running' && live.warmupTimer.status !== 'running') return undefined; const interval = window.setInterval(() => setNow(Date.now()), 250); return () => window.clearInterval(interval); }, [live.timer.status, live.warmupTimer.status]);

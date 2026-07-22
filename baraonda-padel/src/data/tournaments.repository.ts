@@ -17,7 +17,7 @@ export class SupabaseTournamentRepository implements TournamentRepository {
   async list() {
     const client = requireSupabase(); const { data: rows, error } = await client.from('tournaments').select('*').order('updated_at', { ascending: false }); if (error) return fail(error);
     return Promise.all((rows ?? []).map(async row => {
-      const tournament = mapTournamentRowToDomain(row); const [{ data: playerRows, error: playerError }, { data: matchRows, error: matchError }, { data: breakRows, error: breakError }, { data: constraintRows, error: constraintError }] = await Promise.all([client.from('players').select('*').eq('tournament_id', row.id).order('sort_order'), client.from('matches').select('*').eq('tournament_id', row.id).order('sequence_number'), client.from('tournament_breaks').select('*').eq('tournament_id', row.id).order('starts_at'), client.from('player_constraints').select('*').eq('tournament_id', row.id).order('player_b_id')]);
+      const tournament = mapTournamentRowToDomain(row); const [{ data: playerRows, error: playerError }, { data: matchRows, error: matchError }, { data: breakRows, error: breakError }, { data: constraintRows, error: constraintError }] = await Promise.all([client.from('players').select('*').eq('tournament_id', row.id).order('sort_order'), client.from('matches').select('*').eq('tournament_id', row.id).order('starts_at'), client.from('tournament_breaks').select('*').eq('tournament_id', row.id).order('starts_at'), client.from('player_constraints').select('*').eq('tournament_id', row.id).order('player_b_id')]);
       if (playerError || matchError || breakError || constraintError) return fail(playerError ?? matchError ?? breakError ?? constraintError);
       const playerIds = (playerRows ?? []).map(player => player.id); const { data: availabilityRows, error: availabilityError } = playerIds.length ? await client.from('player_availability').select('*').in('player_id', playerIds).order('available_from').order('available_until') : { data: [], error: null };
       if (availabilityError) return fail(availabilityError);
@@ -59,7 +59,21 @@ export class SupabaseTournamentRepository implements TournamentRepository {
       ? await client.from('players').delete().eq('tournament_id', tournament.id).not('id', 'in', `(${currentPlayerIds.join(',')})`)
       : await client.from('players').delete().eq('tournament_id', tournament.id);
     if (stalePlayersError) return fail(stalePlayersError);
-    const mappedMatches = tournament.matches.map((match, index) => ({ match, payload: mapMatchDomainToInsert(match, tournament.id, index + 1, tournament.settings.date) }));
+    // sequence_number is unique per (tournament_id, sequence_number): recomputing it from the
+    // CURRENT array position on every save (as before) reassigns it even for matches that never
+    // moved, and any save whose local ordering doesn't exactly mirror what's already stored
+    // (a stale reload, a second tab/device, a save that only touches a subset of matches) can
+    // then genuinely collide with an existing row's number — not just a transient mid-statement
+    // clash, but a real duplicate at commit. Existing matches keep whatever number they already
+    // have; only matches not yet in the DB (freshly generated) get a new one after the max.
+    const { data: existingSequenceRows, error: existingSequenceError } = currentMatchIds.length
+      ? await client.from('matches').select('id, sequence_number').eq('tournament_id', tournament.id)
+      : { data: [], error: null };
+    if (existingSequenceError) return fail(existingSequenceError);
+    const sequenceById = new Map((existingSequenceRows ?? []).map(row => [row.id, row.sequence_number as number]));
+    let nextSequence = (existingSequenceRows ?? []).reduce((max, row) => Math.max(max, row.sequence_number as number), 0) + 1;
+    const sequenceFor = (matchId: string) => { const existing = sequenceById.get(matchId); if (existing !== undefined) return existing; const assigned = nextSequence; nextSequence += 1; return assigned; };
+    const mappedMatches = tournament.matches.map(match => ({ match, payload: mapMatchDomainToInsert(match, tournament.id, sequenceFor(match.id), tournament.settings.date) }));
     const matchesWithoutLiveState = mappedMatches.filter(item => !item.match.liveState).map(item => item.payload);
     if (matchesWithoutLiveState.length) { const { error: matchesError } = await client.from('matches').upsert(matchesWithoutLiveState); if (matchesError) return fail(matchesError); }
     for (const item of mappedMatches.filter(candidate => candidate.match.liveState)) {

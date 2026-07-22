@@ -137,6 +137,8 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .match-head > div:last-child { justify-items: start; }
 .time span { font-size: 21px; font-weight: 900; }
 .time small, .match-head small { color: #71827d; font-size: 11px; }
+.time .drag-handle { display: inline-flex; cursor: grab; color: var(--muted); margin-right: 2px; vertical-align: middle; }
+.time .drag-handle:active { cursor: grabbing; }
 .match-status { display: inline-flex; padding: 4px 7px; border-radius: 999px; background: #edf5f1; color: #315c50; font-size: 11px; font-weight: 900; }
 .status-in_progress, .status-paused, .status-time_expired { background: #fff0a8; color: #785c00; }
 .status-completed { background: #cceeea; color: #125b37; }

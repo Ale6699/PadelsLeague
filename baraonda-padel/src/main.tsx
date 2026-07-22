@@ -46,11 +46,21 @@ import './supabase.css';
 import './auth.css';
 import './betting.css';
 
+// L'ultimo torneo selezionato non era persistito: al reload activeId ripartiva sempre da
+// requestedTournamentId (solo per /tournaments/:id/edit) o dal primo elemento di list(), che è
+// ordinata per updated_at decrescente — quindi un qualsiasi salvataggio su UN ALTRO torneo (anche
+// da un'altra scheda/dispositivo) lo faceva "saltare in cima" e ti ritrovavi lì dopo il refresh.
+const ACTIVE_TOURNAMENT_KEY = 'baraonda-padel-active-tournament';
+const readPersistedActiveId = () => { try { return localStorage.getItem(ACTIVE_TOURNAMENT_KEY) ?? undefined; } catch { return undefined; } };
+const writePersistedActiveId = (id: string) => { try { localStorage.setItem(ACTIVE_TOURNAMENT_KEY, id); } catch { /* localStorage optional */ } };
+
 function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: string }) {
   const { user, signOut } = useAuth();
   const [tournaments, setTournaments] = useState<Tournament[]>(() => { if (!isLocalDemo) return []; const saved = tournamentStore.load(); return saved.length ? saved : [makeTournament('Torneo 2026')]; });
   const [loading, setLoading] = useState(Boolean(dataProvider)); const [syncError, setSyncError] = useState<string | null>(null); const [hydrated, setHydrated] = useState(false);
-  const [activeId, setActiveId] = useState(requestedTournamentId ?? tournaments[0]?.id ?? ''); const [tab, setTab] = useState<OrganizerTab>(requestedTournamentId ? 'settings' : 'dashboard'); const importer = useRef<HTMLInputElement>(null);
+  const persistedActiveId = readPersistedActiveId();
+  const [activeId, setActiveId] = useState(requestedTournamentId ?? (persistedActiveId && tournaments.some(item => item.id === persistedActiveId) ? persistedActiveId : tournaments[0]?.id ?? '')); const [tab, setTab] = useState<OrganizerTab>(requestedTournamentId ? 'settings' : 'dashboard'); const importer = useRef<HTMLInputElement>(null);
+  useEffect(() => { if (activeId) writePersistedActiveId(activeId); }, [activeId]);
   const [dashboardMatchId, setDashboardMatchId] = useState<string>();
   const [draftTournament, setDraftTournament] = useState<Tournament | null>(null); const [formDirty, setFormDirty] = useState(false); const [mutationBusy, setMutationBusy] = useState(false); const [mutationError, setMutationError] = useState<string | null>(null); const [deleteOpen, setDeleteOpen] = useState(false); const [toast, setToast] = useState('');
   const tournamentsRef = useRef(tournaments);
@@ -62,7 +72,13 @@ function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: strin
   const reloadTimerRef = useRef<number | undefined>(undefined);
   const reloadRequestedRef = useRef(false);
   const localEditVersionRef = useRef(0);
-  const saveScheduled = useCallback(() => savingRef.current || pendingSaveRef.current || saveTimerRef.current !== undefined, []);
+  const retryTimerRef = useRef<number | undefined>(undefined);
+  const retryAttemptRef = useRef(0);
+  // Il retry conta come "salvataggio in corso" agli occhi di reloadFromProvider: durante il backoff
+  // un reload realtime deve aspettare, non riconciliare con lo snapshot server ancora vecchio
+  // (altrimenti sovrascriverebbe in silenzio, es., una partita appena conclusa che non è ancora
+  // arrivata al server per un errore transitorio).
+  const saveScheduled = useCallback(() => savingRef.current || pendingSaveRef.current || saveTimerRef.current !== undefined || retryTimerRef.current !== undefined, []);
   // Every save echoes back as a burst of realtime events (one per touched table). The
   // reload is debounced to collapse the burst into a single list(), and skipped while a
   // local save is in flight or scheduled: local state is ahead of the server then, and
@@ -89,17 +105,38 @@ function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: strin
   // latest state instead of firing its own overlapping request.
   const flushSave = useCallback(() => {
     if (saveTimerRef.current !== undefined) { window.clearTimeout(saveTimerRef.current); saveTimerRef.current = undefined; }
+    if (retryTimerRef.current !== undefined) { window.clearTimeout(retryTimerRef.current); retryTimerRef.current = undefined; }
     if (savingRef.current) { pendingSaveRef.current = true; return; }
     savingRef.current = true;
-    dataProvider.save(tournamentsRef.current).catch(error => setSyncError(isAppError(error) ? error.message : 'Errore di salvataggio.')).finally(() => {
+    dataProvider.save(tournamentsRef.current).then(() => { retryAttemptRef.current = 0; setSyncError(null); }).catch(error => {
+      const appError = isAppError(error) ? error : undefined;
+      setSyncError(appError?.message ?? 'Errore di salvataggio.');
+      // Un conflitto di versione (un'altra schermata ha scritto nel frattempo) non va ritentato
+      // con lo stesso payload, ormai basato su uno stato non più valido: si segnala e si lascia
+      // riconciliare il prossimo reload. Ogni altro errore (rete/Supabase instabile) è quasi
+      // sempre transitorio: senza retry il salvataggio andrebbe perso in silenzio (es. una
+      // partita appena conclusa resterebbe completata solo in locale, per poi "ritornare"
+      // indietro al primo reload che arriva con lo stato server non aggiornato).
+      if (appError?.code !== 'conflict') {
+        retryAttemptRef.current = Math.min(retryAttemptRef.current + 1, 5);
+        retryTimerRef.current = window.setTimeout(() => { retryTimerRef.current = undefined; flushSave(); }, Math.min(2000 * retryAttemptRef.current, 15000));
+      }
+    }).finally(() => {
       savingRef.current = false;
       if (pendingSaveRef.current) { pendingSaveRef.current = false; flushSave(); }
-      else if (reloadRequestedRef.current) { reloadRequestedRef.current = false; reloadFromProvider(); }
+      else if (retryTimerRef.current === undefined && reloadRequestedRef.current) { reloadRequestedRef.current = false; reloadFromProvider(); }
     });
   }, [reloadFromProvider]);
   const tournament = requestedTournamentId ? tournaments.find(item => item.id === requestedTournamentId) : tournaments.find(item => item.id === activeId) ?? tournaments[0];
   useEffect(() => { let disposed = false; dataProvider.list().then(async items => {
-    if (!disposed) { const loaded = items.length ? items : (isLocalDemo ? [makeTournament('Torneo 2026', user?.id)] : []); skipNextRemoteSaveRef.current = true; setTournaments(loaded); setActiveId(requestedTournamentId && loaded.some(item => item.id === requestedTournamentId) ? requestedTournamentId : loaded[0]?.id ?? ''); setHydrated(true); }
+    if (!disposed) {
+      const loaded = items.length ? items : (isLocalDemo ? [makeTournament('Torneo 2026', user?.id)] : []);
+      skipNextRemoteSaveRef.current = true;
+      setTournaments(loaded);
+      const persisted = readPersistedActiveId();
+      setActiveId(requestedTournamentId && loaded.some(item => item.id === requestedTournamentId) ? requestedTournamentId : persisted && loaded.some(item => item.id === persisted) ? persisted : loaded[0]?.id ?? '');
+      setHydrated(true);
+    }
   }).catch(error => { if (!disposed) { skipNextRemoteSaveRef.current = true; setSyncError(isAppError(error) ? error.message : 'Non è stato possibile caricare i tornei.'); setHydrated(true); } }).finally(() => { if (!disposed) setLoading(false); }); return () => { disposed = true; }; }, [requestedTournamentId, user?.id]);
   // Autosave is debounced so a burst of edits (typing, quick select changes) coalesces
   // into one write instead of one write per change.
@@ -182,13 +219,17 @@ function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: strin
   const exportJson = () => { if (!tournament) return; const blob = new Blob([JSON.stringify(tournament, null, 2)], { type: 'application/json' }); const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = `${tournament.name || 'torneo'}.json`; a.click(); URL.revokeObjectURL(url); };
   const importJson = (file?: File) => { if (!file) return; const reader = new FileReader(); reader.onload = () => { try { const imported = JSON.parse(String(reader.result)) as Tournament; if (!imported.settings || !Array.isArray(imported.players) || !Array.isArray(imported.matches)) throw new Error(); const next = { ...imported, id: crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) }; setTournaments(items => [...items, next]); setActiveId(next.id); setTab('dashboard'); } catch { window.alert('Il file non contiene un torneo Baraonda valido.'); } }; reader.readAsText(file); };
   const dashboardMatch = tournament?.matches.find(match => match.id === dashboardMatchId);
-  const persistDashboard = useCallback((liveState: LiveMatchState, status: MatchStatus) => { if (!dashboardMatchId) return; update(t => ({ ...t, matches: t.matches.map(match => match.id === dashboardMatchId ? { ...match, liveState, status } : match) })); }, [dashboardMatchId, update]);
+  // L'id target arriva sempre dall'hook (matchIdRef), mai da dashboardMatchId: quest'ultimo può
+  // già essere avanzato alla partita successiva nello stesso commit in cui live/status vengono
+  // persistiti per quella appena conclusa (vedi commento in useMatchDashboard), e usarlo qui
+  // scriverebbe lo stato sulla partita sbagliata.
+  const persistDashboard = useCallback((liveState: LiveMatchState, status: MatchStatus, matchId: string) => { update(t => ({ ...t, matches: t.matches.map(match => match.id === matchId ? { ...match, liveState, status } : match) })); }, [update]);
   const logout = async () => { try { await signOut(); } catch { setSyncError('La sessione è stata chiusa localmente.'); } finally { tournamentStore.save([]); setTournaments([]); window.location.assign('/login'); } };
   useTournamentRealtime(tournament?.id, reloadFromProvider);
   if (loading) return <main className="configuration-page"><h1>Connessione a Supabase…</h1><p>Caricamento dei tornei in corso.</p></main>;
   if (requestedTournamentId && !tournament) return <main className="empty-state"><section><h1>Accesso non disponibile</h1><p>Non hai i permessi per accedere a questo torneo.</p><button onClick={() => window.location.assign('/tournaments')}>Torna ai tornei</button></section></main>;
   if (!tournament && !draftTournament) return <main className="empty-state"><section><span className="empty-state-icon">🎾</span><h1>Benvenuto in Baraonda Padel</h1><p>Crea il tuo primo torneo per iniziare.</p><button className="auth-submit" onClick={create}>Crea il primo torneo</button><div className="empty-state-links"><button onClick={() => window.location.assign('/profile')}>Il tuo profilo</button><button onClick={logout}>Esci</button></div></section></main>;
-  if (dashboardMatch && tournament) return <MatchDashboard tournament={tournament} match={dashboardMatch} index={tournament.matches.findIndex(match => match.id === dashboardMatch.id)} onClose={() => setDashboardMatchId(undefined)} onPersist={persistDashboard} onFinish={(score, liveState) => {
+  if (dashboardMatch && tournament) return <MatchDashboard tournament={tournament} match={dashboardMatch} index={tournament.matches.findIndex(match => match.id === dashboardMatch.id)} onClose={() => setDashboardMatchId(undefined)} onPersist={persistDashboard} syncError={syncError} onRetrySync={dataProvider.kind === 'supabase' ? reloadFromProvider : undefined} onFinish={(score, liveState) => {
     update(t => ({ ...t, matches: t.matches.map(match => match.id === dashboardMatch.id ? { ...match, liveState, status: 'completed', result: { aGames: score.teamAGames, bGames: score.teamBGames } } : match) }));
     const finishedIndex = tournament.matches.findIndex(match => match.id === dashboardMatch.id);
     const nextMatch = tournament.matches.find((match, matchIndex) => matchIndex > finishedIndex && !isMatchCompleted(match));
@@ -202,7 +243,7 @@ function OrganizerApp({ requestedTournamentId }: { requestedTournamentId?: strin
     {tab === 'players' && <Players tournament={tournament!} update={update} />}
     {tab === 'settings' && <SettingsView mode={draftTournament ? 'create' : 'edit'} tournament={shownTournament} busy={mutationBusy} mutationError={mutationError} onSubmit={saveTournament} onCancel={cancelForm} onDirtyChange={setFormDirty} />}
     {tab === 'schedule' && <Schedule tournament={tournament!} update={update} onOpenDashboard={setDashboardMatchId} onGeneratePublicLink={generatePublicScheduleLink} />}
-    {tab === 'results' && <Results tournament={tournament!} standings={standings} update={update} onOpenDashboard={setDashboardMatchId} />}
+    {tab === 'results' && <Results tournament={tournament!} standings={standings} update={update} />}
     {tab === 'scommesse' && <BettingAdmin tournament={tournament!} />}
     {tab === 'display' && <PublicDisplay tournament={tournament!} standings={standings} reloadTournament={reloadTournaments} storageKey={tournamentStore.storageKey} />}
   </main><DeleteTournamentDialog tournament={tournament!} open={deleteOpen} onClose={() => setDeleteOpen(false)} onDelete={deleteTournament} /></div>;

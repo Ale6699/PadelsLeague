@@ -2,7 +2,7 @@ import { AlertTriangle, FileDown, MonitorPlay, MoreHorizontal, Pencil, Trash2 } 
 import { Tournament, fullName } from '../models';
 import { buildSlots, calendarQuality } from '../solver';
 import { MATCH_BALANCE_LABELS, calculateCalendarBalance } from '../services/matchBalance';
-import { isMatchCompleted } from '../services/matchResults';
+import { getNextPlayableMatch } from '../services/matchResults';
 import { TournamentActionsMenu } from './tournaments/TournamentActionsMenu';
 
 export function Dashboard({ tournament, exportPdf, onOpenDashboard, onEdit, onDelete }: { tournament: Tournament; exportPdf: () => void; onOpenDashboard: (matchId: string) => void; onEdit: () => void; onDelete: () => void }) {
@@ -10,7 +10,7 @@ export function Dashboard({ tournament, exportPdf, onOpenDashboard, onEdit, onDe
   const counts = new Map(tournament.players.map(player => [player.id, 0]));
   const balance = calculateCalendarBalance(tournament);
   tournament.matches.forEach(match => match.players.forEach(id => counts.set(id, (counts.get(id) ?? 0) + 1)));
-  const currentMatch = tournament.matches.find(match => !isMatchCompleted(match));
+  const currentMatch = getNextPlayableMatch(tournament.matches);
 
   return <>
     <header className="page-header dashboard-page-header"><div><h1>{tournament.settings.title}</h1><p>{tournament.settings.date} · {tournament.settings.start}–{tournament.settings.end} · 1 campo</p></div><div className="actions desktop-page-actions">{currentMatch && <button className="secondary" onClick={() => onOpenDashboard(currentMatch.id)}><MonitorPlay size={17} /> Apri cruscotto</button>}<button onClick={exportPdf}><FileDown size={17} /> Esporta PDF</button><TournamentActionsMenu onEdit={onEdit} onDelete={onDelete} /></div><details className="mobile-page-menu"><summary aria-label="Altre azioni"><MoreHorizontal /></summary><div><button className="secondary" onClick={exportPdf}><FileDown size={17} /> Esporta PDF</button><button className="secondary" onClick={onEdit}><Pencil size={17} /> Modifica torneo</button><button className="danger" onClick={onDelete}><Trash2 size={17} /> Elimina torneo</button></div></details></header>

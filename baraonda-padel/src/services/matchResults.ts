@@ -24,4 +24,6 @@ export function getMatchOutcome(match: Match): MatchOutcome {
   return calculated;
 }
 export function isMatchCompleted(match: Match) { return ['team_a', 'team_b', 'draw'].includes(getMatchOutcome(match)); }
+/** Prima partita non ancora conclusa in ordine cronologico: unica apribile dal cruscotto. */
+export function getNextPlayableMatch(matches: Match[]): Match | undefined { return matches.find(match => !isMatchCompleted(match)); }
 export function scoreFromInput(value: string): number | null { if (value === '') return null; const parsed = Number(value); return validateMatchScore(parsed) ? parsed : null; }

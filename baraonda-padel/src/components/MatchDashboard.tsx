@@ -6,11 +6,11 @@ import { MATCH_OUTCOME_LABELS, calculateMatchOutcome } from '../services/matchRe
 import { useMatchDashboard } from '../hooks/useMatchDashboard';
 import { TeamScorePanel } from './TeamScorePanel';
 
-type Props = { tournament: Tournament; match: Match; index: number; onClose: () => void; onPersist: (live: LiveMatchState, status: MatchStatus) => void; onFinish: (score: LiveMatchScore, live: LiveMatchState) => void; onReset: (live: LiveMatchState) => void };
+type Props = { tournament: Tournament; match: Match; index: number; onClose: () => void; onPersist: (live: LiveMatchState, status: MatchStatus, matchId: string) => void; onFinish: (score: LiveMatchScore, live: LiveMatchState) => void; onReset: (live: LiveMatchState) => void; syncError?: string | null; onRetrySync?: () => void };
 const statusLabel: Record<MatchStatus, string> = { scheduled: 'Programmato', in_progress: 'Partita in corso', paused: 'In pausa', time_expired: 'Tempo scaduto', completed: 'Partita conclusa', cancelled: 'Annullata' };
 const phaseLabel: Record<MatchPhase, string> = { warmup: 'Riscaldamento / cambio campo', coin_toss: 'Per la palla', playing: '' };
 
-export function MatchDashboard({ tournament, match, index, onClose, onPersist, onFinish, onReset }: Props) {
+export function MatchDashboard({ tournament, match, index, onClose, onPersist, onFinish, onReset, syncError, onRetrySync }: Props) {
   const names = new Map(tournament.players.map(player => [player.id, fullName(player)]));
   const [feedback, setFeedback] = useState('');
   const maxGames = tournament.settings.maxGamesPerMatch ?? 6;
@@ -45,7 +45,6 @@ export function MatchDashboard({ tournament, match, index, onClose, onPersist, o
     onFinish(dashboard.live.score, dashboard.live);
   };
   const reset = () => { if (window.confirm('Vuoi azzerare completamente questa partita? Questa operazione cancellerà timer, punteggio e cronologia.')) onReset(dashboard.resetMatch()); };
-  const reopen = () => { if (window.confirm('Stai modificando una partita già conclusa. La classifica verrà ricalcolata.')) dashboard.setStatus('in_progress'); };
   useEffect(() => {
     const shortcut = (event: KeyboardEvent) => {
       const target = event.target as HTMLElement;
@@ -68,6 +67,7 @@ export function MatchDashboard({ tournament, match, index, onClose, onPersist, o
       <div><b>{tournament.settings.title}</b><span>Partita {index + 1} · {match.start}–{match.end}</span></div>
       <div className="dashboard-status"><span>{phase !== 'playing' ? phaseLabel[phase] : statusLabel[dashboard.status]}</span><button className="secondary" onClick={() => void toggleFullscreen()}>{document.fullscreenElement ? <Minimize /> : <Expand />} Schermo intero</button></div>
     </header>
+    {syncError && <section className="notice" role="alert">{syncError} {onRetrySync && <button className="small" onClick={onRetrySync}>Riprova</button>}</section>}
     <main className="dashboard-main">
       {phase === 'warmup' ? <div className={`timer-display timer-${dashboard.live.warmupTimer.status}`}>
         <small>{dashboard.live.warmupTimer.status === 'expired' ? 'RISCALDAMENTO TERMINATO' : phaseLabel.warmup.toUpperCase()}</small>
@@ -97,7 +97,7 @@ export function MatchDashboard({ tournament, match, index, onClose, onPersist, o
       </div> : <div className="dashboard-primary-controls">
         <button disabled={completed} onClick={dashboard.live.timer.status === 'running' ? dashboard.pauseTimer : dashboard.startTimer}>{dashboard.live.timer.status === 'running' ? <Pause /> : <Play />}{dashboard.live.timer.status === 'paused' ? 'Riprendi' : dashboard.live.timer.status === 'running' ? 'Pausa' : 'Avvia'}</button>
         <button className="secondary" disabled={!dashboard.live.history.length || completed} onClick={dashboard.undo}><Undo2 /> Annulla punto</button>
-        {completed ? <button onClick={reopen}>Modifica risultato</button> : <button className="finish-button" onClick={finish}>Termina partita</button>}
+        {completed ? <em className="dashboard-completed-note">Partita conclusa. Per correggere il punteggio vai su Risultati e classifica.</em> : <button className="finish-button" onClick={finish}>Termina partita</button>}
       </div>}
       {phase === 'warmup' ? <details className="secondary-controls"><summary>Altri controlli</summary><div className="dashboard-controls">
         <button className="secondary" onClick={dashboard.resetWarmup}><TimerReset /> Azzera riscaldamento</button>
@@ -110,9 +110,9 @@ export function MatchDashboard({ tournament, match, index, onClose, onPersist, o
         <button className="secondary" disabled={!dashboard.live.redo.length || completed} onClick={dashboard.redo}><Redo2 /> Ripristina</button>
         <button className="secondary" disabled={completed} onClick={dashboard.resetCurrentGame}><RotateCcw /> Reset game</button>
         <button className="secondary" onClick={() => dashboard.setLive(current => ({ ...current, audioEnabled: !current.audioEnabled, lastUpdated: Date.now() }))}><Volume2 /> Suono {dashboard.live.audioEnabled ? 'attivo' : 'disattivo'}</button>
-        <button className="danger" onClick={reset}>Reset partita</button>
+        <button className="danger" disabled={completed} onClick={reset}>Reset partita</button>
       </div></details>}
-      {phase === 'playing' && <details className="manual-editor">
+      {phase === 'playing' && !completed && <details className="manual-editor">
         <summary>Correzione manuale e guida scorciatoie</summary>
         <p>A / L: punto coppia · Spazio: pausa/riprendi · Ctrl/Cmd+Z: annulla · Ctrl/Cmd+Shift+Z: ripristina · F: schermo intero.</p>
         <ManualEditor score={dashboard.live.score} maxGames={maxGames} onSave={dashboard.setManualScore} />

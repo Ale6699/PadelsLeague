@@ -1,13 +1,13 @@
-import { MonitorPlay, RotateCcw } from 'lucide-react';
+import { RotateCcw } from 'lucide-react';
 import { Standing, Tournament, fullName } from '../models';
 import { resetMatchForReplay } from '../services/liveMatch';
 import { MATCH_OUTCOME_LABELS, getMatchOutcome, isMatchCompleted, scoreFromInput } from '../services/matchResults';
 
-export function Results({ tournament, standings, update, onOpenDashboard }: { tournament: Tournament; standings: Standing[]; update: (fn: (t: Tournament) => Tournament) => void; onOpenDashboard: (matchId: string) => void }) {
+export function Results({ tournament, standings, update }: { tournament: Tournament; standings: Standing[]; update: (fn: (t: Tournament) => Tournament) => void }) {
   const names = new Map(tournament.players.map(player => [player.id, fullName(player)]));
   const maxGames = tournament.settings.maxGamesPerMatch ?? 6;
   const setScore = (id: string, side: 'aGames' | 'bGames', raw: string) => { const score = scoreFromInput(raw); if (raw !== '' && score === null) return; update(t => ({ ...t, matches: t.matches.map(match => match.id === id ? { ...match, result: { aGames: side === 'aGames' ? score : match.result?.aGames ?? null, bGames: side === 'bGames' ? score : match.result?.bGames ?? null } } : match) })); };
-  const reset = (id: string, completed: boolean) => { if (!completed || window.confirm('Vuoi cancellare il risultato di questa partita?')) update(t => ({ ...t, matches: t.matches.map(match => match.id === id ? resetMatchForReplay(match, t.settings.playMinutes, t.settings.warmupMinutes) : match) })); };
+  const reset = (id: string) => { if (window.confirm('Vuoi cancellare il risultato di questa partita e riportarla tra quelle da giocare?')) update(t => ({ ...t, matches: t.matches.map(match => match.id === id ? resetMatchForReplay(match, t.settings.playMinutes, t.settings.warmupMinutes) : match) })); };
 
   return <>
     <header className="page-header"><div><h1>Risultati e classifica</h1><p>Inserisci i game: risultato e classifica si aggiornano automaticamente.</p></div></header>
@@ -23,7 +23,7 @@ export function Results({ tournament, standings, update, onOpenDashboard }: { to
             <div className="result-team result-team-a"><span><small>Coppia A</small><b>{names.get(match.players[0])}</b><b>{names.get(match.players[1])}</b></span><label>Game A<input aria-label={`Game coppia A, partita ${index + 1}`} inputMode="numeric" type="number" min="0" max={maxGames} step="1" placeholder="—" value={result.aGames ?? ''} onChange={event => setScore(match.id, 'aGames', event.target.value)} /></label></div>
             <div className="result-divider"><span>VS</span></div>
             <div className="result-team result-team-b"><span><small>Coppia B</small><b>{names.get(match.players[2])}</b><b>{names.get(match.players[3])}</b></span><label>Game B<input aria-label={`Game coppia B, partita ${index + 1}`} inputMode="numeric" type="number" min="0" max={maxGames} step="1" placeholder="—" value={result.bGames ?? ''} onChange={event => setScore(match.id, 'bGames', event.target.value)} /></label></div>
-            <div className="result-actions"><button className="secondary" onClick={() => onOpenDashboard(match.id)}><MonitorPlay size={16} /> Cruscotto</button>{canReset && <button className="secondary" aria-label={`Annulla risultato partita ${index + 1}`} onClick={() => reset(match.id, isMatchCompleted(match))}><RotateCcw size={16} /> Annulla</button>}</div>
+            <div className="result-actions">{canReset && <button className="secondary" aria-label={`Annulla risultato partita ${index + 1}`} onClick={() => reset(match.id)}><RotateCcw size={16} /> Annulla</button>}</div>
           </article>;
         })}
       </section>
