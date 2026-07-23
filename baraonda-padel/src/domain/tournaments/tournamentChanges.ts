@@ -1,4 +1,5 @@
 import { Tournament } from '../../models';
+import { DEFAULT_MIN_ACCEPTABLE_BALANCE } from '../../services/matchBalance';
 import { TournamentFormValues, normalizeSlug } from './tournamentValidation';
 
 export type TournamentChangeSet = { hasChanges: boolean; affectsSchedule: boolean; changedFields: string[] };
@@ -8,11 +9,12 @@ export const TOURNAMENT_FIELD_LABELS: Record<string, string> = {
   playMinutes: 'Durata partita', warmupMinutes: 'Cambio/riscaldamento', targetMatchesPerPlayer: 'Massimo partite per giocatore',
   maxGamesPerMatch: 'Massimo game', prioritizeMixed: 'Preferenza coppie miste', gameScoringMode: 'Regole di punteggio',
   killerPoint: 'Punto killer', killerPointAfterDeuces: 'Parità prima del punto killer',
+  minAcceptableBalance: 'Equilibrio minimo accettato',
   notes: 'Note pubbliche', status: 'Stato', isPublic: 'Visibilità pubblica', publicSlug: 'Link pubblico',
   timerSoundEnabled: 'Suono timer', pauses: 'Pause',
 };
 
-const scheduleFields = new Set(['date', 'start', 'end', 'playMinutes', 'warmupMinutes', 'targetMatchesPerPlayer', 'maxGamesPerMatch', 'prioritizeMixed', 'gameScoringMode', 'pauses']);
+const scheduleFields = new Set(['date', 'start', 'end', 'playMinutes', 'warmupMinutes', 'targetMatchesPerPlayer', 'maxGamesPerMatch', 'prioritizeMixed', 'gameScoringMode', 'pauses', 'minAcceptableBalance']);
 
 export function tournamentToFormValues(tournament: Tournament): TournamentFormValues {
   return {
@@ -21,6 +23,7 @@ export function tournamentToFormValues(tournament: Tournament): TournamentFormVa
     warmupMinutes: tournament.settings.warmupMinutes, targetMatchesPerPlayer: tournament.settings.targetMatchesPerPlayer,
     maxGamesPerMatch: tournament.settings.maxGamesPerMatch ?? 6, prioritizeMixed: tournament.settings.prioritizeMixed,
     gameScoringMode: 'advantages', killerPoint: tournament.settings.killerPoint ?? false, killerPointAfterDeuces: tournament.settings.killerPointAfterDeuces ?? 1,
+    minAcceptableBalance: tournament.settings.minAcceptableBalance ?? DEFAULT_MIN_ACCEPTABLE_BALANCE,
     notes: tournament.notes ?? '', status: tournament.status ?? 'draft',
     isPublic: tournament.isPublic ?? false, publicSlug: tournament.publicSlug ?? '',
     timerSoundEnabled: tournament.timerSoundEnabled ?? true, pauses: tournament.settings.pauses.map(pause => ({ ...pause })),
@@ -35,6 +38,7 @@ export function applyTournamentFormValues(tournament: Tournament, values: Tourna
       playMinutes: values.playMinutes, warmupMinutes: values.warmupMinutes, targetMatchesPerPlayer: values.targetMatchesPerPlayer,
       maxGamesPerMatch: values.maxGamesPerMatch, prioritizeMixed: values.prioritizeMixed,
       gameScoringMode: values.gameScoringMode, killerPoint: values.killerPoint, killerPointAfterDeuces: values.killerPointAfterDeuces,
+      minAcceptableBalance: values.minAcceptableBalance,
       pauses: values.pauses.map(pause => ({ ...pause })) },
   };
 }
@@ -47,6 +51,7 @@ export function getTournamentChanges(original: Tournament, edited: TournamentFor
 
 export function formatChangeValue(field: string, value: unknown) {
   if (field === 'playMinutes' || field === 'warmupMinutes') return `${value} minuti`;
+  if (field === 'minAcceptableBalance') return `${value}/100`;
   if (typeof value === 'boolean') return value ? 'Sì' : 'No';
   if (field === 'pauses') return `${(value as unknown[]).length} pause`;
   return String(value ?? '');

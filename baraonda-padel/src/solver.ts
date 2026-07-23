@@ -1,5 +1,5 @@
 import { Match, Player, Quality, Settings, Tournament, fullName, levelValue, pairKey, toMin, toTime, uid } from './models';
-import { balanceScoreFromLevels, calculateMatchBalance } from './services/matchBalance';
+import { DEFAULT_MIN_ACCEPTABLE_BALANCE, balanceScoreFromLevels, calculateMatchBalance } from './services/matchBalance';
 import { isMatchCompleted } from './services/matchResults';
 
 const overlap = (a1: number, a2: number, b1: number, b2: number) => Math.max(a1, b1) < Math.min(a2, b2);
@@ -132,6 +132,7 @@ export function generateSchedule(tournament: Tournament, keepLocked = true, opti
   const remainingOpenSlots = new Array<number>(slots.length + 1).fill(0);
   for (let slotIndex = slots.length - 1; slotIndex >= 0; slotIndex -= 1) remainingOpenSlots[slotIndex] = remainingOpenSlots[slotIndex + 1] + (openSlot[slotIndex] ? 1 : 0);
 
+  const minAcceptableBalance = tournament.settings.minAcceptableBalance ?? DEFAULT_MIN_ACCEPTABLE_BALANCE;
   const level = players.map(player => levelValue[player.level] ?? levelValue.Intermedio);
   const donna = players.map(player => player.gender === 'Donna');
   const mixedMat = players.map(a => players.map(b => teamMixed(a, b)));
@@ -143,7 +144,20 @@ export function generateSchedule(tournament: Tournament, keepLocked = true, opti
     [[match.players[0], match.players[1]], [match.players[2], match.players[3]]].forEach(([a, b]) => { const key = pairKey(a, b); previousPairCounts.set(key, (previousPairCounts.get(key) ?? 0) + 1); });
     const group = [...match.players].sort().join('|'); previousGroupCounts.set(group, (previousGroupCounts.get(group) ?? 0) + 1); previousTimedGroupCounts.set(`${match.start}|${group}`, (previousTimedGroupCounts.get(`${match.start}|${group}`) ?? 0) + 1);
   });
-  const balanceBand = (score: number) => score >= 90 ? 4 : score >= 75 ? 3 : score >= 60 ? 2 : score >= 40 ? 1 : 0;
+  const balanceBand = (score: number) => score >= 90 ? 4 : score >= 75 ? 3 : score >= minAcceptableBalance ? 2 : score >= 40 ? 1 : 0;
+  // Scegliere ora un gruppo "perfetto" (es. tutti intermedi) può lasciare per un turno successivo solo
+  // giocatori di livello estremo senza più nessun intermedio cuscinetto: quel turno sarebbe forzato
+  // a un abbinamento sbilanciato. Individuiamo questo rischio guardando chi resta con partite da recuperare.
+  const strandsExtremeLevels = (nextDeficits: number[]) => {
+    let avanzato = 0; let principiante = 0; let other = 0;
+    for (let playerIndex = 0; playerIndex < n; playerIndex += 1) {
+      if (nextDeficits[playerIndex] <= 0) continue;
+      if (level[playerIndex] === levelValue.Avanzato) avanzato += 1;
+      else if (level[playerIndex] === levelValue.Principiante) principiante += 1;
+      else other += 1;
+    }
+    return other === 0 && avanzato + principiante > 0 && Math.abs(avanzato - principiante) >= 2;
+  };
   const randomOrder = players.map(() => slots.map(() => random()));
   const noveltyScore = (pairing: [number, number, number, number], start: string) => {
     const ids = pairing.map(playerIndex => players[playerIndex].id);
@@ -183,7 +197,7 @@ export function generateSchedule(tournament: Tournament, keepLocked = true, opti
       const violations: string[] = [];
       if (avoidMat[one][two]) violations.push(`${players[one].firstName} e ${players[two].firstName}: incompatibilit\u00e0 tra compagni`);
       if (avoidMat[three][four]) violations.push(`${players[three].firstName} e ${players[four].firstName}: incompatibilit\u00e0 tra compagni`);
-      violations.push(...calculateMatchBalance({ ...match, players: ids, violations: [] }, players).warnings);
+      violations.push(...calculateMatchBalance({ ...match, players: ids, violations: [] }, players, minAcceptableBalance).warnings);
       const womenA = Number(donna[one]) + Number(donna[two]); const womenB = Number(donna[three]) + Number(donna[four]);
       if ((womenA === 2 && womenB === 0) || (womenB === 2 && womenA === 0)) violations.push('Due donne contro due uomini');
       return { ...match, players: ids, violations };
@@ -226,9 +240,8 @@ export function generateSchedule(tournament: Tournament, keepLocked = true, opti
       available.sort((a, b) => Number(urgent[b]) - Number(urgent[a]) || Number(playedImmediatelyBefore(a)) - Number(playedImmediatelyBefore(b)) || progressDelta(a) - progressDelta(b) || (remaining[a][slotIndex + 1] - deficits[a]) - (remaining[b][slotIndex + 1] - deficits[b]) || (randomize ? randomOrder[a][slotIndex] - randomOrder[b][slotIndex] : ((a + slotIndex) % n) - ((b + slotIndex) % n)) || a - b);
       const pool = [...available.slice(0, Math.min(12, available.length)), ...available.slice(12).filter(playerIndex => urgent[playerIndex])];
 
-      type Candidate = { pairing: [number, number, number, number]; avoid: number; priority: number[]; progress: number; quality: number; repeated: number; balance: number; mixedPenalty: number; genderPenalty: number; novelty: number[] };
+      type Candidate = { pairing: [number, number, number, number]; avoid: number; priority: number[]; progress: number; quality: number; repeated: number; balance: number; mixedPenalty: number; genderPenalty: number; novelty: number[]; strandsExtremes: boolean };
       const candidates: Candidate[] = [];
-      let best: Candidate | undefined;
       for (let a = 0; a < pool.length - 3; a += 1) for (let b = a + 1; b < pool.length - 2; b += 1) for (let c = b + 1; c < pool.length - 1; c += 1) for (let d = c + 1; d < pool.length; d += 1) {
         const group = [pool[a], pool[b], pool[c], pool[d]];
         if (group.filter(playerIndex => urgent[playerIndex]).length !== urgentTotal) continue;
@@ -247,6 +260,7 @@ export function generateSchedule(tournament: Tournament, keepLocked = true, opti
         const scarcity = group.reduce((sum, playerIndex) => sum + Math.max(0, remaining[playerIndex][slotIndex + 1] - nextDeficits[playerIndex]), 0);
         const priority = [maxRun, consecutive, Math.round(progress * 1000), scarcity, -group.reduce((sum, playerIndex) => sum + deficits[playerIndex], 0)];
         const rest = consecutive * 160;
+        const strandsExtremes = strandsExtremeLevels(nextDeficits);
 
         for (const [i, j, k, l] of [[0, 1, 2, 3], [0, 2, 1, 3], [0, 3, 1, 2]]) {
           const [one, two, three, four] = [group[i], group[j], group[k], group[l]];
@@ -257,19 +271,28 @@ export function generateSchedule(tournament: Tournament, keepLocked = true, opti
           const twoWomenVsTwoMen = (womenA === 2 && womenB === 0) || (womenB === 2 && womenA === 0);
           const repeated = partnersMat[one][two] + partnersMat[three][four];
           const mixedPenalty = tournament.settings.prioritizeMixed ? Number(!mixedMat[one][two]) + Number(!mixedMat[three][four]) : 0;
-          let quality = rest + repeated * 230 + (100 - score) * 7 + (score < 60 ? 500 : 0) + (score < 40 ? 1500 : 0) + (twoWomenVsTwoMen ? 450 : 0);
+          let quality = rest + repeated * 230 + (100 - score) * 7 + (score < minAcceptableBalance ? 500 : 0) + (score < 40 ? 1500 : 0) + (twoWomenVsTwoMen ? 450 : 0);
           quality += mixedPenalty * 25;
-          const candidate: Candidate = { pairing: [one, two, three, four], avoid, priority, progress, quality, repeated, balance: score, mixedPenalty, genderPenalty: Number(twoWomenVsTwoMen), novelty: randomize ? noveltyScore([one, two, three, four], slots[slotIndex].start) : [] };
-          if (randomize) candidates.push(candidate);
-          else {
-            const priorityComparison = best ? compareArrays(candidate.priority, best.priority) : 0;
-            if (!best || priorityComparison < 0 || (priorityComparison === 0 && (candidate.avoid < best.avoid || (candidate.avoid === best.avoid && candidate.quality < best.quality)))) best = candidate;
-          }
+          candidates.push({ pairing: [one, two, three, four], avoid, priority, progress, quality, repeated, balance: score, mixedPenalty, genderPenalty: Number(twoWomenVsTwoMen), novelty: randomize ? noveltyScore([one, two, three, four], slots[slotIndex].start) : [], strandsExtremes });
         }
       }
 
-      if (randomize && candidates.length) {
-        let shortlist = candidates;
+      // Preferisci gruppi che permettono di restare almeno alla soglia minima di equilibrio configurata;
+      // scendi sotto solo quando per questo slot non esiste alcuna alternativa che la rispetti.
+      const balanced = candidates.filter(candidate => candidate.balance >= minAcceptableBalance);
+      const pool2 = balanced.length ? balanced : candidates;
+      // Tra le alternative già equilibrate, evita comunque quelle che lascerebbero solo giocatori di
+      // livello estremo (senza intermedi cuscinetto) per un turno successivo, se esiste un'alternativa che non lo fa.
+      const notStranding = pool2.filter(candidate => !candidate.strandsExtremes);
+      const pool3 = notStranding.length ? notStranding : pool2;
+      let best: Candidate | undefined;
+      if (!randomize) best = pool3.reduce<Candidate | undefined>((current, candidate) => {
+        if (!current) return candidate;
+        const priorityComparison = compareArrays(candidate.priority, current.priority);
+        return priorityComparison < 0 || (priorityComparison === 0 && (candidate.avoid < current.avoid || (candidate.avoid === current.avoid && candidate.quality < current.quality))) ? candidate : current;
+      }, undefined);
+      else if (pool3.length) {
+        let shortlist = pool3;
         const bestPriority = shortlist.reduce((current, candidate) => compareArrays(candidate.priority, current) < 0 ? candidate.priority : current, shortlist[0].priority);
         shortlist = shortlist.filter(candidate => compareArrays(candidate.priority, bestPriority) === 0);
         const minimumAvoid = Math.min(...shortlist.map(candidate => candidate.avoid)); shortlist = shortlist.filter(candidate => candidate.avoid === minimumAvoid);
@@ -291,7 +314,7 @@ export function generateSchedule(tournament: Tournament, keepLocked = true, opti
       if (avoidMat[best.pairing[0]][best.pairing[1]]) violations.push(`${one.firstName} e ${two.firstName}: incompatibilit\u00e0 tra compagni`);
       if (avoidMat[best.pairing[2]][best.pairing[3]]) violations.push(`${three.firstName} e ${four.firstName}: incompatibilit\u00e0 tra compagni`);
       const ids: [string, string, string, string] = [one.id, two.id, three.id, four.id];
-      violations.push(...calculateMatchBalance({ id: 'candidate', start: slot.start, end: slot.end, players: ids, locked: false, violations: [] }, players).warnings);
+      violations.push(...calculateMatchBalance({ id: 'candidate', start: slot.start, end: slot.end, players: ids, locked: false, violations: [] }, players, minAcceptableBalance).warnings);
       const womenA = (donna[best.pairing[0]] ? 1 : 0) + (donna[best.pairing[1]] ? 1 : 0);
       const womenB = (donna[best.pairing[2]] ? 1 : 0) + (donna[best.pairing[3]] ? 1 : 0);
       if ((womenA === 2 && womenB === 0) || (womenB === 2 && womenA === 0)) violations.push('Due donne contro due uomini');
