@@ -213,7 +213,7 @@ summary { cursor: pointer; }
 .public-routed .public-mobile-tabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; max-width: 500px; margin: 18px auto; padding: 4px; border: 1px solid #ffffff28; border-radius: 13px; background: #0c3027d9; }
 .public-routed .public-mobile-tabs button { min-width: 0; padding: 8px 10px; background: transparent; color: #dcebe6; }
 .public-routed .public-mobile-tabs button.active { background: #fff; color: var(--green-950); }
-.public-routed .public-view, .public-routed .public-desktop-upcoming { display: none; }
+.public-routed .public-view { display: none; }
 .public-routed[data-mobile-view="live"] .public-live-view,
 .public-routed[data-mobile-view="schedule"] .public-schedule-view,
 .public-routed[data-mobile-view="standings"] .public-standings-view { display: block; }
@@ -389,7 +389,7 @@ summary { cursor: pointer; }
   .public-mobile-tabs { position: sticky; z-index: 10; top: 8px; display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; max-width: 500px; margin: 18px auto; padding: 4px; border: 1px solid #ffffff28; border-radius: 13px; background: #0c3027d9; backdrop-filter: blur(14px); }
   .public-mobile-tabs button { min-width: 0; min-height: var(--tap); padding: 7px 5px; background: transparent; color: #dcebe6; font-size: 12px; }
   .public-mobile-tabs button.active { background: #fff; color: var(--green-950); }
-  .public-routed .public-view, .public-routed .public-desktop-upcoming { display: none; }
+  .public-routed .public-view { display: none; }
   .public-routed[data-mobile-view="live"] .public-live-view,
   .public-routed[data-mobile-view="schedule"] .public-schedule-view,
   .public-routed[data-mobile-view="standings"] .public-standings-view { display: block; }
