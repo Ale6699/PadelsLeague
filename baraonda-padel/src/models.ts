@@ -32,7 +32,7 @@ export type Match = {
 export type Settings = {
   title: string; date: string; start: string; end: string; playMinutes: number; warmupMinutes: number;
   pauses: Pause[]; targetMatchesPerPlayer: number; prioritizeMixed: boolean; gameScoringMode?: GameScoringMode; maxGamesPerMatch?: number;
-  killerPoint?: boolean; killerPointAfterDeuces?: number;
+  killerPoint?: boolean; killerPointAfterDeuces?: number; minAcceptableBalance?: number;
 };
 export type Tournament = {
   id: string; name: string; settings: Settings; players: Player[]; matches: Match[];
@@ -54,7 +54,7 @@ export const fullName = (player: Player) => `${player.firstName} ${player.lastNa
 export const defaultSettings: Settings = {
   title: 'Baraonda Padel Sistemi Tre', date: new Date().toISOString().slice(0, 10), start: '10:00', end: '19:00',
   playMinutes: 12, warmupMinutes: 3, pauses: [], targetMatchesPerPlayer: 8, prioritizeMixed: true,
-  gameScoringMode: 'advantages', maxGamesPerMatch: 6, killerPoint: false, killerPointAfterDeuces: 1,
+  gameScoringMode: 'advantages', maxGamesPerMatch: 6, killerPoint: false, killerPointAfterDeuces: 1, minAcceptableBalance: 60,
 };
 
 export const DEFAULT_BETTING_BALANCE = 1000;

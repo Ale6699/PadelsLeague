@@ -41,6 +41,21 @@ describe('generatore baraonda', () => {
     expect(matches.every(match => !((match.players[0] === 'a' && match.players[1] === 'b') || (match.players[0] === 'b' && match.players[1] === 'a') || (match.players[2] === 'a' && match.players[3] === 'b') || (match.players[2] === 'b' && match.players[3] === 'a')))).toBe(true);
   });
 
+  it('evita di lasciare tre avanzati e un principiante bloccati insieme quando ci sono intermedi da usare come cuscinetto', () => {
+    const withLevel = (id: string, level: Player['level']) => ({ ...player(id), level });
+    const players = [
+      withLevel('a1', 'Avanzato'), withLevel('a2', 'Avanzato'), withLevel('a3', 'Avanzato'), withLevel('p1', 'Principiante'),
+      withLevel('m1', 'Intermedio'), withLevel('m2', 'Intermedio'), withLevel('m3', 'Intermedio'), withLevel('m4', 'Intermedio'),
+    ];
+    const value = tournament(players, { targetMatchesPerPlayer: 1 });
+    const isForcedOutmatchedGroup = (matches: Match[]) => matches.some(match => {
+      const levels = match.players.map(id => players.find(item => item.id === id)!.level);
+      return levels.filter(level => level === 'Avanzato').length === 3 && levels.filter(level => level === 'Principiante').length === 1;
+    });
+    expect(isForcedOutmatchedGroup(generated(value).matches)).toBe(false);
+    [1, 2, 3, 4, 5, 6].forEach(seed => expect(isForcedOutmatchedGroup(generated(value, true, { randomize: true, seed }).matches)).toBe(false));
+  });
+
   it('con 19 giocatori, 36 slot e massimo 8 assegna 4 partite a tutti', () => {
     const players = Array.from({ length: 19 }, (_, index) => player(`p${index}`));
     const result = generated(tournament(players, { end: '18:00' }));

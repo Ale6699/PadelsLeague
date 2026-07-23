@@ -25,7 +25,7 @@ export function PublicTournamentPage({ slug }: { slug: string }) {
     const { data: row, error: tournamentError } = await supabase.from('public_tournaments').select('*').eq('public_slug', slug).maybeSingle();
     setBettingEnabled(Boolean(row?.betting_enabled));
     if (tournamentError || !row) { setTournament(null); setError('Questo torneo non è disponibile.'); setLoading(false); return false; }
-    const [{ data: players, error: playersError }, { data: matches, error: matchesError }] = await Promise.all([supabase.from('public_players').select('*').eq('tournament_id', row.id), supabase.from('public_matches').select('*').eq('tournament_id', row.id).order('sequence_number')]);
+    const [{ data: players, error: playersError }, { data: matches, error: matchesError }] = await Promise.all([supabase.from('public_players').select('*').eq('tournament_id', row.id), supabase.from('public_matches').select('*').eq('tournament_id', row.id).order('starts_at')]);
     if (playersError || matchesError) { setError('Non è stato possibile caricare lo schermo pubblico.'); setLoading(false); return false; }
     setTournament(toPublicTournament(row, players ?? [], matches ?? [])); setLoading(false); return true;
   }, [slug]);

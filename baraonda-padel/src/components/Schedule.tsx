@@ -30,7 +30,7 @@ export function Schedule({ tournament, update, onOpenDashboard, onGeneratePublic
     if (result.commonMatchesPerPlayer !== result.requestedMax) window.alert(text);
   };
   const clearAll = () => { if (!window.confirm('Vuoi eliminare le partite del calendario? Quelle bloccate o già disputate restano invariate. Potrai annullare con "Annulla rigenerazione".')) return; update(t => ({ ...t, previousMatches: t.matches, matches: t.matches.filter(match => match.locked || isMatchCompleted(match)) })); };
-  const changePlayers = (match: Match, players: Match['players']) => { const rating = calculateMatchBalance({ ...match, players }, tournament.players); if (rating.score < 40 && !window.confirm(`Questa modifica genera una partita molto sbilanciata (${rating.score}/100).\nVuoi continuare?`)) return false; update(t => ({ ...t, matches: t.matches.map(item => item.id === match.id ? { ...item, players, violations: [...item.violations.filter(warning => !isBalanceWarning(warning) && warning !== 'Modifica manuale: verifica disponibilità e incompatibilità'), ...rating.warnings, 'Modifica manuale: verifica disponibilità e incompatibilità'] } : item) })); return true; };
+  const changePlayers = (match: Match, players: Match['players']) => { const rating = calculateMatchBalance({ ...match, players }, tournament.players, tournament.settings.minAcceptableBalance); if (rating.score < 40 && !window.confirm(`Questa modifica genera una partita molto sbilanciata (${rating.score}/100).\nVuoi continuare?`)) return false; update(t => ({ ...t, matches: t.matches.map(item => item.id === match.id ? { ...item, players, violations: [...item.violations.filter(warning => !isBalanceWarning(warning) && warning !== 'Modifica manuale: verifica disponibilità e incompatibilità'), ...rating.warnings, 'Modifica manuale: verifica disponibilità e incompatibilità'] } : item) })); return true; };
   const replace = (match: Match, index: number, playerId: string) => { if (changePlayers(match, match.players.map((id, itemIndex) => itemIndex === index ? playerId : id) as Match['players'])) update(t => ({ ...t, scheduleNeedsRegeneration: true })); };
   const swap = (match: Match, source: number, target: number) => changePlayers(match, match.players.map((id, index) => index === source ? match.players[target] : index === target ? match.players[source] : id) as Match['players']);
   // Sposta un'intera partita su un altro slot orario: le 4 coppie restano quelle, si scambia solo
@@ -57,7 +57,7 @@ export function Schedule({ tournament, update, onOpenDashboard, onGeneratePublic
     {!tournament.players.length && <section className="notice">Aggiungi almeno quattro giocatori per generare il calendario.</section>}
     {!tournament.matches.length && tournament.players.length > 0 && <section className="empty-panel"><span aria-hidden="true">📅</span><h2>Calendario non ancora generato</h2><p>Quando i giocatori sono pronti, crea tutte le partite con un solo tocco.</p><button onClick={regenerate}><Shuffle size={17} /> Genera calendario</button></section>}
     <div className="schedule">{tournament.matches.map((match, matchIndex) => {
-      const rating = calculateMatchBalance(match, tournament.players);
+      const rating = calculateMatchBalance(match, tournament.players, tournament.settings.minAcceptableBalance);
       const locked = match.locked || isMatchCompleted(match);
       const matchStatus = match.status ?? 'scheduled';
       return <article

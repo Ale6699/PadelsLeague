@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "baraonda-padel-dev",
+      "runtimeExecutable": "sh",
+      "runtimeArgs": ["-c", "cd baraonda-padel && npm run dev -- --port 5180 --strictPort"],
+      "port": 5180
+    }
+  ]
+}

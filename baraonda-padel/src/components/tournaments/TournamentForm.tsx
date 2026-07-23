@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Tournament } from '../../models';
 import { TOURNAMENT_FIELD_LABELS, formatChangeValue, getTournamentChanges, tournamentToFormValues } from '../../domain/tournaments/tournamentChanges';
 import { TournamentFormErrors, TournamentFormValues, validateTournament } from '../../domain/tournaments/tournamentValidation';
+import { MIN_ACCEPTABLE_BALANCE_RANGE } from '../../services/matchBalance';
 
 export type TournamentSaveChoice = 'save' | 'regenerate';
 
@@ -53,6 +54,11 @@ export function TournamentForm({ mode, tournament, busy = false, mutationError, 
       <fieldset className="form-group"><legend>Preferenze</legend><div className="preference-grid">
         <label className="check"><input type="checkbox" checked={values.prioritizeMixed} onChange={event => patch('prioritizeMixed', event.target.checked)} /> Prediligi coppie miste</label>
         <label className="check"><input type="checkbox" checked={values.timerSoundEnabled} onChange={event => patch('timerSoundEnabled', event.target.checked)} /> Suono del timer</label>
+        <label className="form-wide">Equilibrio minimo accettato: {values.minAcceptableBalance}/100 <small>(obiettivo: sempre 100)</small>
+          <input type="range" min={MIN_ACCEPTABLE_BALANCE_RANGE.min} max={MIN_ACCEPTABLE_BALANCE_RANGE.max} step={MIN_ACCEPTABLE_BALANCE_RANGE.step} value={values.minAcceptableBalance} onChange={event => patch('minAcceptableBalance', Number(event.target.value))} />
+          {fieldError('minAcceptableBalance')}
+          <small>Il generatore punta sempre al massimo equilibrio possibile tra le coppie. Abbassa questa soglia solo se con i tuoi giocatori è difficile evitare partite segnalate come sbilanciate.</small>
+        </label>
       </div></fieldset>
     </section>
     <section><h2>Pause</h2>{values.pauses.map((pause, index) => <div className="pause" key={index}><input aria-label={`Inizio pausa ${index + 1}`} type="time" value={pause.from} onChange={event => patch('pauses', values.pauses.map((item, itemIndex) => itemIndex === index ? { ...item, from: event.target.value } : item))} /><input aria-label={`Fine pausa ${index + 1}`} type="time" value={pause.to} onChange={event => patch('pauses', values.pauses.map((item, itemIndex) => itemIndex === index ? { ...item, to: event.target.value } : item))} /><button type="button" className="secondary" onClick={() => patch('pauses', values.pauses.filter((_, itemIndex) => itemIndex !== index))}>Rimuovi</button></div>)}{fieldError('pauses')}<button type="button" className="secondary" onClick={() => patch('pauses', [...values.pauses, { from: '13:00', to: '14:00' }])}>+ Aggiungi pausa</button></section>

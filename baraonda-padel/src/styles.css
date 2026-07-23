@@ -218,6 +218,11 @@ summary { cursor: pointer; }
 .public-routed[data-mobile-view="schedule"] .public-schedule-view,
 .public-routed[data-mobile-view="standings"] .public-standings-view { display: block; }
 .public-routed .public-schedule-view { max-width: 820px; margin: 0 auto; }
+.public-schedule-header { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; margin-bottom: 14px; }
+.public-schedule-header h2 { margin: 0; }
+.public-player-filter { background: #ffffff18; color: inherit; border: 1px solid #ffffff30; border-radius: 8px; padding: 6px 10px; font-size: 14px; cursor: pointer; max-width: 220px; }
+.public-player-filter option { background: #1a4a3a; color: #fff; }
+.public-no-matches { text-align: center; padding: 30px 20px; color: #cfe5df; font-size: 14px; }
 .public-schedule-list { display: grid; gap: 10px; }
 .public-schedule-list article { display: grid; grid-template-columns: 58px 1fr auto; align-items: center; gap: 12px; padding: 13px; border-radius: 12px; background: #ffffff12; text-align: left; }
 .public-schedule-list time, .public-schedule-list article > div { display: grid; gap: 2px; }

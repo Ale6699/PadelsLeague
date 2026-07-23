@@ -31,6 +31,11 @@ describe('calculateMatchBalance', () => {
     const rating = calculateMatchBalance(match(['a', 'b', 'c', 'd']), players);
     expect(rating.label).toBe('very_unbalanced'); expect(rating.score).toBeLessThan(40); expect(rating.warnings).toContain('Due giocatori avanzati non possono giocare contro due principianti.');
   });
+  it('vieta due avanzati contro una coppia avanzato-principiante', () => {
+    const players = [player('a', 'Avanzato'), player('b', 'Avanzato'), player('c', 'Avanzato'), player('d', 'Principiante')];
+    const rating = calculateMatchBalance(match(['a', 'b', 'c', 'd']), players);
+    expect(rating.label).toBe('very_unbalanced'); expect(rating.score).toBeLessThan(40); expect(rating.warnings).toContain('Due giocatori avanzati non possono giocare contro una coppia con un principiante.');
+  });
   it('gestisce un livello non valido come intermedio', () => {
     const invalid = { ...player('a', 'Intermedio'), level: 'Sconosciuto' } as unknown as Player;
     const rating = calculateMatchBalance(match(['a', 'b', 'c', 'd']), [invalid, player('b', 'Intermedio'), player('c', 'Intermedio'), player('d', 'Intermedio')]);

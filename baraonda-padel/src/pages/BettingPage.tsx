@@ -66,7 +66,7 @@ export function BettingPage({ slug }: { slug: string }) {
       setTournament({ id: row.id, name: row.name });
       const [{ data: playerRows }, { data: matchRows }] = await Promise.all([
         supabase.from('public_players').select('id, first_name, last_name').eq('tournament_id', row.id),
-        supabase.from('public_matches').select('id, sequence_number, starts_at, team_a_player_1_id, team_a_player_2_id, team_b_player_1_id, team_b_player_2_id, team_a_games, team_b_games, status').eq('tournament_id', row.id).order('sequence_number'),
+        supabase.from('public_matches').select('id, sequence_number, starts_at, team_a_player_1_id, team_a_player_2_id, team_b_player_1_id, team_b_player_2_id, team_a_games, team_b_games, status').eq('tournament_id', row.id).order('starts_at'),
       ]);
       if (disposed) return;
       const nameMap = new Map((playerRows ?? []).map(player => [player.id, `${player.first_name} ${player.last_name}`.trim()]));
@@ -82,7 +82,7 @@ export function BettingPage({ slug }: { slug: string }) {
     if (!supabase || !tournament?.id) return undefined;
     const client = supabase;
     const reloadMatches = async () => {
-      const { data } = await client.from('public_matches').select('id, sequence_number, starts_at, team_a_player_1_id, team_a_player_2_id, team_b_player_1_id, team_b_player_2_id, team_a_games, team_b_games, status').eq('tournament_id', tournament.id).order('sequence_number');
+      const { data } = await client.from('public_matches').select('id, sequence_number, starts_at, team_a_player_1_id, team_a_player_2_id, team_b_player_1_id, team_b_player_2_id, team_a_games, team_b_games, status').eq('tournament_id', tournament.id).order('starts_at');
       const name = (id: string | null) => (id && players.get(id)) || '?';
       setMatches((data ?? []).map((match, index) => ({ id: match.id, index, start: new Date(match.starts_at).toISOString().slice(11, 16), teamA: `${name(match.team_a_player_1_id)} / ${name(match.team_a_player_2_id)}`, teamB: `${name(match.team_b_player_1_id)} / ${name(match.team_b_player_2_id)}`, status: match.status, teamAGames: match.team_a_games, teamBGames: match.team_b_games })));
     };
