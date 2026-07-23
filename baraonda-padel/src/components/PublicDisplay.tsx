@@ -1,4 +1,4 @@
-import { memo, useMemo } from 'react';
+import { memo, useMemo, useState } from 'react';
 import { CalendarDays, Circle, Radio, RefreshCw, Trophy } from 'lucide-react';
 import { Match, Standing, Tournament, fullName } from '../models';
 import { refreshOptions, useTournamentAutoRefresh } from '../hooks/useTournamentAutoRefresh';
@@ -20,6 +20,9 @@ type Props = {
 
 export const PublicDisplay = memo(function PublicDisplay({ tournament, standings, reloadTournament, storageKey, view = 'live', onViewChange }: Props) {
   const names = useMemo(() => new Map(tournament.players.map(player => [player.id, fullName(player)])), [tournament.players]);
+  const sortedPlayers = useMemo(() => [...tournament.players].sort((a, b) => fullName(a).localeCompare(fullName(b), 'it')), [tournament.players]);
+  const [filterPlayerId, setFilterPlayerId] = useState('');
+  const filteredMatches = useMemo(() => filterPlayerId ? tournament.matches.filter(m => m.players.includes(filterPlayerId)) : tournament.matches, [tournament.matches, filterPlayerId]);
   const pendingMatches = useMemo(() => tournament.matches.filter(match => !isMatchCompleted(match)), [tournament.matches]);
   const featured = tournament.matches.find(isLive) ?? pendingMatches[0] ?? tournament.matches[0];
   const featuredRating = useMemo(() => featured ? calculateMatchBalance(featured, tournament.players) : undefined, [featured, tournament.players]);
@@ -38,7 +41,7 @@ export const PublicDisplay = memo(function PublicDisplay({ tournament, standings
 
     {upcoming.length > 0 && <div className="upcoming public-desktop-upcoming"><h2>Prossime partite</h2>{upcoming.map(match => { const rating = calculateMatchBalance(match, tournament.players); return <div key={match.id}><span><b>{match.start}</b> · {names.get(match.players[0])} / {names.get(match.players[1])} — {names.get(match.players[2])} / {names.get(match.players[3])}</span><b>Equilibrio: {rating.score}/100</b></div>; })}</div>}
 
-    <div className="public-view public-schedule-view"><h2>Calendario</h2><div className="public-schedule-list">{tournament.matches.map((match, index) => <article key={match.id}><time>{match.start}<small>{match.end}</small></time><div><small>Partita {index + 1}</small><b>{names.get(match.players[0])} / {names.get(match.players[1])}</b><span>contro</span><b>{names.get(match.players[2])} / {names.get(match.players[3])}</b></div>{match.result?.aGames != null && match.result.bGames != null ? <strong>{match.result.aGames}–{match.result.bGames}</strong> : <span className={`public-match-state state-${match.status}`}>{isLive(match) ? 'LIVE' : isMatchCompleted(match) ? 'Conclusa' : 'In programma'}</span>}</article>)}</div></div>
+    <div className="public-view public-schedule-view"><div className="public-schedule-header"><h2>Calendario</h2><select className="public-player-filter" value={filterPlayerId} onChange={e => setFilterPlayerId(e.target.value)} aria-label="Filtra per giocatore"><option value="">Tutti i giocatori</option>{sortedPlayers.map(p => <option key={p.id} value={p.id}>{fullName(p)}</option>)}</select></div><div className="public-schedule-list">{filteredMatches.length === 0 ? <p className="public-no-matches">Nessuna partita trovata.</p> : filteredMatches.map(match => { const idx = tournament.matches.indexOf(match); return <article key={match.id}><time>{match.start}<small>{match.end}</small></time><div><small>Partita {idx + 1}</small><b>{names.get(match.players[0])} / {names.get(match.players[1])}</b><span>contro</span><b>{names.get(match.players[2])} / {names.get(match.players[3])}</b></div>{match.result?.aGames != null && match.result.bGames != null ? <strong>{match.result.aGames}–{match.result.bGames}</strong> : <span className={`public-match-state state-${match.status}`}>{isLive(match) ? 'LIVE' : isMatchCompleted(match) ? 'Conclusa' : 'In programma'}</span>}</article>; })}</div></div>
 
     <div className="public-view public-standings-view"><h2>Classifica live</h2><ol>{standings.slice(0, 10).map((row, index) => <li key={row.id}><span className="public-position">{index + 1}</span><span>{row.name}<small>{row.played} partite · {row.gf}–{row.ga} game</small></span><b>{row.points} pt</b></li>)}</ol></div>
   </div>;
